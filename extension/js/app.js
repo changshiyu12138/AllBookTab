@@ -81,8 +81,10 @@
   /* 三级加载链（解决低分辨率）：
    * 1. favicon.im 高清源（最高 128px）  2. DuckDuckGo 图标  3. 本地 _favicon 缓存（仅 16/32px）
    * 全部失败保留品牌色字母圆标。结果按 host 记忆缓存，筛选重渲染不重复请求。
-   * 不用内联 onerror（MV3 CSP 禁止内联事件），用 new Image() 探测。 */
-  var FAV_MEM = {};   // host -> 成功的 URL（string）或 null（全链失败）；只存结果，不存 Promise
+   * 远程源走 fetch → blob → objectURL：一次请求同时完成「探测 + 显示 + 白色检测」，
+   * blob 同源可进 canvas 读像素，无 CORS 污染；显示也用 blob URL，不产生第二次网络请求。
+   * 所有远程请求经全局队列限流（并发上限 + 最小间隔），避免几百个 host 同时打 favicon.im 触发 429。 */
+  var FAV_MEM = {};   // host -> 原始 URL（string）或 null（全链失败）；只存结果，不存 Promise
   try {
     var _fm = JSON.parse(localStorage.getItem('myNavFavUrl') || '{}');
     if (_fm && typeof _fm === 'object') {
@@ -92,6 +94,7 @@
       });
     }
   } catch (e) { FAV_MEM = {}; }
+  var FAV_OBJ = {};   // host -> blob:objectURL（仅本次会话有效，显示直接用，零额外请求）
   var FAV_WAIT = {};  // 并发去重：host -> 在途 Promise
   var FAV_MEM_TIMER = null;
   function favMemSave() {
@@ -113,9 +116,43 @@
       im.src = src;
     });
   }
+
+  /* ---------- 远程请求限流队列 ---------- */
+  var FAV_Q = [], FAV_N = 0;
+  var FAV_MAX = 6;    // 最大并发
+  var FAV_GAP = 120;  // 两个远程请求最小间隔 ms（≈8 req/s，防止 favicon.im 429）
+  var FAV_LAST = 0;
+  function favQueue(task) {
+    return new Promise(function (res) {
+      FAV_Q.push({ t: task, r: res });
+      favPump();
+    });
+  }
+  function favPump() {
+    if (!FAV_Q.length) return;
+    var wait = FAV_LAST + FAV_GAP - Date.now();
+    if (wait > 0) { setTimeout(favPump, wait); return; }
+    if (FAV_N >= FAV_MAX) return;
+    FAV_LAST = Date.now();
+    FAV_N++;
+    (function () {
+      var j = FAV_Q.shift();
+      Promise.resolve().then(j.t).then(function (v) { FAV_N--; favPump(); j.r(v); },
+        function () { FAV_N--; favPump(); j.r(null); });
+    })();
+    favPump();
+  }
+  function fetchBlob(src) {
+    return favQueue(function () {
+      return fetch(src).then(function (r) { return r.ok ? r.blob() : null; })
+        .catch(function () { return null; });
+    });
+  }
+
   function loadFavUrl(host, pageUrl) {
     if (!host) return Promise.resolve(null);
-    if (FAV_MEM[host] !== undefined) return Promise.resolve(FAV_MEM[host]);
+    if (FAV_OBJ[host] !== undefined) return Promise.resolve(FAV_OBJ[host]);
+    if (FAV_MEM[host] !== undefined) return Promise.resolve(FAV_MEM[host]); // 已缓存（含 null 失败标记）
     if (FAV_WAIT[host]) return FAV_WAIT[host]; // 同 host 的卡片共用一次探测
     var local = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
       ? chrome.runtime.getURL('_favicon/?pageUrl=' + encodeURIComponent(pageUrl) + '&size=32')
@@ -125,13 +162,41 @@
       'https://icons.duckduckgo.com/ip3/' + host + '.ico'
     ];
     if (local) chain.push(local);
+    var usedSrc = null;
     var p = chain.reduce(function (prev, src) {
-      return prev.then(function (u) { return u ? u : probeImg(src); });
+      return prev.then(function (u) {
+        if (u) return u;
+        if (src.indexOf('chrome-extension:') === 0) {
+          // 本地 _favicon 是同源资源，img 探测即可（无 CORS、无控制台噪音）
+          return probeImg(src).then(function (ok) { if (ok) usedSrc = src; return ok; });
+        }
+        return fetchBlob(src).then(function (blob) {
+          if (!blob) return null;
+          return new Promise(function (res) {
+            var objUrl = URL.createObjectURL(blob);
+            var im = new Image();
+            var done = false;
+            var t = setTimeout(function () { if (!done) { done = true; URL.revokeObjectURL(objUrl); res(null); } }, 6000);
+            im.onload = function () {
+              if (done) return; done = true; clearTimeout(t);
+              if (im.naturalWidth < 16) { URL.revokeObjectURL(objUrl); return res(null); } // 1x1 占位图
+              usedSrc = src;
+              var w = analyzeWhite(im); // blob 同源，canvas 可读
+              FAV_WHITE[host] = w ? 1 : 0;
+              favWhiteSave();
+              res(objUrl);
+            };
+            im.onerror = function () { if (!done) { done = true; clearTimeout(t); URL.revokeObjectURL(objUrl); res(null); } };
+            im.src = objUrl;
+          });
+        });
+      });
     }, Promise.resolve(null));
     FAV_WAIT[host] = p;
     p.then(function (u) {
       delete FAV_WAIT[host];
-      FAV_MEM[host] = u || null;
+      FAV_MEM[host] = u ? usedSrc : null; // 持久化原始 URL，下次会话直接显示（可命中 HTTP 缓存）
+      if (u) FAV_OBJ[host] = u;
       favMemSave();
     });
     return p;
@@ -144,7 +209,7 @@
   /* ---------- 白色图标检测 ----------
    * 部分 logo 是纯白色（如通义千问），放在白色底衬上会隐形。
    * 图标加载后用 canvas 采样像素：近白不透明像素占比 > 90% 判定为白色图标，
-   * 给圆标换深色底衬。结果按 host 缓存；canvas 跨域读取失败时回退到内置清单。 */
+   * 给圆标换深色底衬。结果按 host 缓存；内置清单兜底。 */
   var WHITE_HOSTS = ['tongyi.aliyun.com', 'tongyi.com', 'www.tongyi.com', 'qwen.com',
     'www.qwen.com', 'chat.qwen.ai', 'qwen.ai'];
   var FAV_WHITE = {};
@@ -159,51 +224,22 @@
   function isWhiteHost(host) {
     return FAV_WHITE[host] === 1 || WHITE_HOSTS.indexOf(host) !== -1;
   }
-  function detectWhite(src, host) {
-    return new Promise(function (res) {
-      if (!host || !src) return res(false);
-      if (FAV_WHITE[host] !== undefined) return res(FAV_WHITE[host] === 1);
-      if (typeof fetch !== 'function') return res(false);
-      var settled = false;
-      function finish(w) {
-        if (settled) return; settled = true;
-        FAV_WHITE[host] = w ? 1 : 0;
-        favWhiteSave();
-        res(w);
+  function analyzeWhite(im) {
+    try {
+      var cv = document.createElement('canvas');
+      cv.width = cv.height = 24;
+      var cx = cv.getContext('2d');
+      cx.drawImage(im, 0, 0, 24, 24);
+      var d = cx.getImageData(0, 0, 24, 24).data;
+      var n = 0, white = 0;
+      for (var i = 0; i < d.length; i += 4) {
+        if (d[i + 3] > 200) {
+          n++;
+          if (d[i] > 235 && d[i + 1] > 235 && d[i + 2] > 235) white++;
+        }
       }
-      // favicon.im 等源不发 CORS 头，crossOrigin='anonymous' 的 <img> 会被浏览器拦截并刷屏报错。
-      // 改用 fetch（manifest host_permissions 已授权）→ blob → objectURL，图片同源、canvas 可读。
-      fetch(src).then(function (r) { return r.ok ? r.blob() : null; }).then(function (blob) {
-        if (!blob) return finish(false);
-        var objUrl = URL.createObjectURL(blob);
-        var im = new Image();
-        var done = false;
-        var t = setTimeout(function () { if (!done) { done = true; URL.revokeObjectURL(objUrl); finish(false); } }, 5000);
-        im.onload = function () {
-          if (done) return; done = true; clearTimeout(t);
-          URL.revokeObjectURL(objUrl);
-          var w = false;
-          try {
-            var cv = document.createElement('canvas');
-            cv.width = cv.height = 24;
-            var cx = cv.getContext('2d');
-            cx.drawImage(im, 0, 0, 24, 24);
-            var d = cx.getImageData(0, 0, 24, 24).data;
-            var n = 0, white = 0;
-            for (var i = 0; i < d.length; i += 4) {
-              if (d[i + 3] > 200) {
-                n++;
-                if (d[i] > 235 && d[i + 1] > 235 && d[i + 2] > 235) white++;
-              }
-            }
-            if (n > 10 && white / n > 0.9) w = true;
-          } catch (e) { w = false; } // 异常兜底：内置清单仍生效
-          finish(w);
-        };
-        im.onerror = function () { if (!done) { done = true; clearTimeout(t); URL.revokeObjectURL(objUrl); finish(false); } };
-        im.src = objUrl;
-      }).catch(function () { finish(false); });
-    });
+      return n > 10 && white / n > 0.9;
+    } catch (e) { return false; } // 异常兜底：内置清单仍生效
   }
   function attachFavicons(root) {
     (root || document).querySelectorAll('.fav[data-bu]').forEach(function (span) {
@@ -218,11 +254,8 @@
           if (!span.isConnected) return;
           span.textContent = '';
           span.appendChild(img);
-          if (!span.classList.contains('fav-white')) {
-            detectWhite(src, h).then(function (w) {
-              if (w && span.isConnected) span.classList.add('fav-white');
-            });
-          }
+          // 白色检测结果在探测阶段已写入 FAV_WHITE，此处直接应用
+          if (FAV_WHITE[h] === 1) span.classList.add('fav-white');
         };
         img.src = src;
       });
