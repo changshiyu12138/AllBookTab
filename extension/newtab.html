@@ -70,12 +70,20 @@
     <div class="mstats" id="mStats"></div>
     <div class="mrow" id="rowDup">
       <div><div class="mt">清理重复书签</div><div class="ms" id="dupDesc"></div></div>
-      <button class="mbtn warn" id="btnDup">去重</button>
+      <div class="mrow2">
+        <button class="mbtn ghost" id="btnViewDup">查看</button>
+        <button class="mbtn warn" id="btnDup">去重</button>
+      </div>
     </div>
+    <div class="mlist" id="dupList"></div>
     <div class="mrow" id="rowInvalid">
       <div><div class="mt">清理无效书签</div><div class="ms" id="invalidDesc"></div></div>
-      <button class="mbtn warn" id="btnInvalid">清理</button>
+      <div class="mrow2">
+        <button class="mbtn ghost" id="btnViewInvalid">查看</button>
+        <button class="mbtn warn" id="btnInvalid">清理</button>
+      </div>
     </div>
+    <div class="mlist" id="invalidList"></div>
     <div class="mrow">
       <div><div class="mt">生成整理后的书签文件夹</div><div class="ms">在「其他书签」下新建「My Nav 整理」文件夹，按 分类/子分类 复制全部有效书签，不改动原有书签</div></div>
       <button class="mbtn" id="btnOrganize">生成</button>

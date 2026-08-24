@@ -10,9 +10,10 @@
   var LS_OVERRIDE = 'myNavOverrideV1'; // {bookmarkId: [cat, sub]} 拖拽自定义分类
 
   // ============ 全局状态 ============
-  var ALL = [];          // 全部有效书签 [{id,title,url,cat,sub,tags,dup,host,custom}]
+  var ALL = [];          // 全部有效书签 [{id,title,url,cat,sub,tags,dup,host,custom,path}]
   var INVALID = [];      // 无效书签（chrome:// 等）
   var DUPS = [];         // 重复书签（每组保留首个，其余在此）
+  var DUP_GROUPS = [];   // 重复分组 [{key,kept,dups[]}]，用于「查看」明细
   var quick = [];        // 快捷入口 [{t,u}]
   var selTags = [];      // 已选标签
   var tagModeAny = true; // true=任一命中 false=全部命中
@@ -39,10 +40,11 @@
   function getTree() {
     return new Promise(function (res) { chrome.bookmarks.getTree(res); });
   }
-  function flatten(nodes, out, invalid) {
+  function flatten(nodes, out, invalid, path) {
+    path = path || [];
     nodes.forEach(function (n) {
       if (n.url) {
-        var b = { id: n.id, title: (n.title || '').trim() || n.url, url: n.url, dateAdded: n.dateAdded || 0 };
+        var b = { id: n.id, title: (n.title || '').trim() || n.url, url: n.url, dateAdded: n.dateAdded || 0, path: path.join(' / ') };
         if (C.isGarbage(b)) { invalid.push(b); return; }
         var cs = C.classify(b);
         b.cat = cs[0]; b.sub = cs[1];
@@ -51,16 +53,28 @@
         b.tags = C.tagsOf(b, b.cat);
         b.host = C.hostOf(b.url);
         out.push(b);
-      } else if (n.children) flatten(n.children, out, invalid);
+      } else if (n.children) {
+        flatten(n.children, out, invalid, n.title ? path.concat([n.title]) : path);
+      }
     });
   }
   function markDups() {
-    DUPS = [];
-    var seen = {};
+    DUPS = []; DUP_GROUPS = [];
+    var groups = {};
+    var order = [];
     ALL.forEach(function (b) {
       var k = C.normUrl(b.url);
-      if (seen[k]) DUPS.push(b); else seen[k] = true;
+      if (!groups[k]) {
+        groups[k] = { key: k, kept: b, dups: [] };
+        order.push(groups[k]);
+        b.dup = false;
+      } else {
+        b.dup = true; // 卡片右上角「重复」角标
+        groups[k].dups.push(b);
+        DUPS.push(b);
+      }
     });
+    DUP_GROUPS = order.filter(function (g) { return g.dups.length; });
   }
 
   // ============ favicon ============
@@ -558,7 +572,50 @@
       : '未发现无效书签';
     $('btnDup').disabled = !DUPS.length;
     $('btnInvalid').disabled = !INVALID.length;
+    $('btnViewDup').disabled = !DUPS.length;
+    $('btnViewInvalid').disabled = !INVALID.length;
+    // 重新打开时收起上次的明细
+    [['dupList', 'btnViewDup'], ['invalidList', 'btnViewInvalid']].forEach(function (p) {
+      $(p[0]).classList.remove('show'); $(p[0]).innerHTML = '';
+      $(p[1]).textContent = '查看';
+    });
     $('modalMask').classList.add('show');
+  }
+
+  /* ---------- 「查看」明细：去重/清理前先过目 ---------- */
+  function bmItem(b, badge, cls) {
+    return '<div class="ditem"><span class="dbadge ' + cls + '">' + badge + '</span>' +
+      '<a href="' + esc(b.url) + '" target="_blank" rel="noopener" title="' + esc(b.title) + '\n' + esc(b.url) + '">' + esc(b.title) + '</a>' +
+      '<span class="dpath" title="' + esc(b.path) + '">' + esc(b.path || '—') + '</span></div>';
+  }
+  function renderDupList() {
+    if (!DUP_GROUPS.length) return '<div class="dempty">没有重复书签</div>';
+    return DUP_GROUPS.map(function (g, i) {
+      return '<div class="dgroup">' +
+        '<div class="dgurl">#' + (i + 1) + ' · ' + esc(g.kept.url) + '</div>' +
+        bmItem(g.kept, '保留', 'keep') +
+        g.dups.map(function (b) { return bmItem(b, '将删除', 'del'); }).join('') +
+        '</div>';
+    }).join('');
+  }
+  function renderInvalidList() {
+    if (!INVALID.length) return '<div class="dempty">没有无效书签</div>';
+    return INVALID.map(function (b) {
+      return '<div class="dgroup"><div class="dgurl">' + esc(b.url) + '</div>' +
+        bmItem(b, '无效', 'del') + '</div>';
+    }).join('');
+  }
+  function toggleView(kind) {
+    var box = $(kind === 'dup' ? 'dupList' : 'invalidList');
+    var btn = $(kind === 'dup' ? 'btnViewDup' : 'btnViewInvalid');
+    if (box.classList.contains('show')) {
+      box.classList.remove('show'); box.innerHTML = '';
+      btn.textContent = '查看';
+      return;
+    }
+    box.innerHTML = kind === 'dup' ? renderDupList() : renderInvalidList();
+    box.classList.add('show');
+    btn.textContent = '收起';
   }
 
   function rmBookmark(id) {
@@ -722,6 +779,8 @@
     $('organizeBtn').onclick = openOrganize;
     $('mClose').onclick = function () { $('modalMask').classList.remove('show'); };
     $('modalMask').onclick = function (e) { if (e.target === $('modalMask')) $('modalMask').classList.remove('show'); };
+    $('btnViewDup').onclick = function () { toggleView('dup'); };
+    $('btnViewInvalid').onclick = function () { toggleView('invalid'); };
     $('btnDup').onclick = dedupe;
     $('btnInvalid').onclick = cleanInvalid;
     $('btnOrganize').onclick = buildOrganizedFolder;

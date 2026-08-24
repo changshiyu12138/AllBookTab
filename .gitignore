@@ -4,3 +4,10 @@
 # 忽略个人原始书签（含隐私，不入库）
 bookmarks_raw.txt
 classified_preview.txt
+
+# 测试文件不入库
+extension/test/
+
+# 打包产物不入库
+my-nav-v*.zip
+my-nav-v*/
