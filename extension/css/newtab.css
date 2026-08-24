@@ -191,7 +191,11 @@ main{flex:1;min-width:0;padding:0}
 .cat.collapsed .cat-head .count{display:none}
 
 .sub{margin:4px 0 20px}
-.sub-title{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.8px;margin:0 2px 10px}
+.sub-title{
+  font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.8px;margin:0 2px 10px;
+  scroll-margin-top:94px; /* 侧边栏点击滚动定位时避开 sticky topbar（约 78px） */
+}
+.cat{scroll-margin-top:88px} /* 窄屏 chips 点击分类滚动定位同理 */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px}
 .link{
   display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--card);
