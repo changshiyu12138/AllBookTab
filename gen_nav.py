@@ -5,7 +5,7 @@
 import os, re, html, json, collections
 from urllib.parse import urlparse
 
-VERSION = "v0.2.1"
+VERSION = "v0.2.2"
 GEN_DATE = "2026-08-24"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -297,6 +297,10 @@ a{color:inherit;text-decoration:none}
 #themeBtn svg{width:16px;height:16px}
 
 /* ---------- 快捷入口 ---------- */
+/* ---------- 统计行 ---------- */
+.stats-line{padding:22px 28px 0;max-width:1400px;margin:0 auto;text-align:center;font-size:13px;color:var(--muted)}
+.stats-line b{color:var(--accent);font-weight:700}
+
 .quick-wrap{padding:26px 28px 4px;max-width:1400px;margin:0 auto}
 .quick-label{font-size:13px;color:var(--muted);margin-bottom:12px;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
 .quick-label .qcount{font-size:11px;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:1px 8px;border-radius:99px}
@@ -482,6 +486,7 @@ footer b{color:var(--text)}
 
 @media (max-width:640px){
   .layout{padding:14px 16px 32px;gap:0}
+  .stats-line{padding:16px 16px 0;font-size:12px}
   .quick-wrap{padding:20px 16px 4px}
   .tagbar-wrap{padding:16px 16px 4px}
   .topbar{padding:12px 16px}
@@ -503,6 +508,8 @@ footer b{color:var(--text)}
     <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
   </button>
 </div>
+
+<div class="stats-line">共 <b>%TOTAL%</b> 个站点 · <b>%CATS%</b> 个分类 · <b>%TAGTOTAL%</b> 个标签 · 生成于 <b>%GEN_DATE%</b></div>
 
 <div class="quick-wrap">
   <div class="quick-label">快捷入口 <span class="qcount" id="qCount">0/12</span><span style="font-size:11px">悬停任意书签卡片，点 ☆ 收藏到这里</span></div>
