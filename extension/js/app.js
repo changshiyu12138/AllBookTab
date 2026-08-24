@@ -80,28 +80,47 @@
   // ============ favicon ============
   /* 三级加载链（解决低分辨率）：
    * 1. favicon.im 高清源（最高 128px）  2. DuckDuckGo 图标  3. 本地 _favicon 缓存（仅 16/32px）
-   * 全部失败保留品牌色字母圆标。结果按 host 记忆缓存，筛选重渲染不重复请求。
-   * 远程源走 fetch → blob → objectURL：一次请求同时完成「探测 + 显示 + 白色检测」，
-   * blob 同源可进 canvas 读像素，无 CORS 污染；显示也用 blob URL，不产生第二次网络请求。
-   * 所有远程请求经全局队列限流（并发上限 + 最小间隔），避免几百个 host 同时打 favicon.im 触发 429。 */
-  var FAV_MEM = {};   // host -> 原始 URL（string）或 null（全链失败）；只存结果，不存 Promise
-  try {
-    var _fm = JSON.parse(localStorage.getItem('myNavFavUrl') || '{}');
-    if (_fm && typeof _fm === 'object') {
-      Object.keys(_fm).forEach(function (k) {
-        if (_fm[k] === null || typeof _fm[k] === 'string') FAV_MEM[k] = _fm[k];
-        // 旧版本误存的 Promise 被序列化成 {} → 视为脏数据丢弃，重新探测
-      });
-    }
-  } catch (e) { FAV_MEM = {}; }
-  var FAV_OBJ = {};   // host -> blob:objectURL（仅本次会话有效，显示直接用，零额外请求）
+   * 全部失败保留品牌色字母圆标。
+   * 远程源走 fetch → blob → objectURL：一次请求同时完成「探测 + 显示 + 白色检测」。
+   * 持久缓存升级为 IndexedDB 存图片字节本身：旧方案 localStorage 只存 URL 字符串，
+   * 下次会话仍要对 favicon.im 发网络请求，几百个 host 同时发图 → 瞬时 429 → 部分
+   * 图标随机加载失败（表现为"时有时无"）。现在首次探测成功即把 blob 落盘，
+   * 之后所有会话直接本地读 blob 显示，零网络请求；
+   * 瞬时失败只做本会话内存标记，不落盘，下个会话自动重试。
+   * 所有远程请求经全局队列限流（并发上限 + 最小间隔），避免触发 429。 */
+  var FAV_MEM = {};   // 内存级：host -> null（本会话全链失败的临时标记，不落盘）
+  var FAV_OBJ = {};   // host -> blob:objectURL 或本地 URL（本会话显示用）
   var FAV_WAIT = {};  // 并发去重：host -> 在途 Promise
-  var FAV_MEM_TIMER = null;
-  function favMemSave() {
-    clearTimeout(FAV_MEM_TIMER);
-    FAV_MEM_TIMER = setTimeout(function () {
-      try { localStorage.setItem('myNavFavUrl', JSON.stringify(FAV_MEM)); } catch (e) {}
-    }, 800);
+  try { localStorage.removeItem('myNavFavUrl'); } catch (e) {} // 清掉旧版 URL 缓存
+  var FAV_DB = null;
+  function favDb() {
+    if (FAV_DB) return Promise.resolve(FAV_DB);
+    return new Promise(function (res) {
+      if (!window.indexedDB) return res(null);
+      var rq;
+      try { rq = indexedDB.open('myNavFav', 1); } catch (e) { return res(null); }
+      rq.onupgradeneeded = function () { rq.result.createObjectStore('fav'); };
+      rq.onsuccess = function () { FAV_DB = rq.result; res(FAV_DB); };
+      rq.onerror = function () { res(null); };
+    });
+  }
+  function dbGet(host) {
+    return favDb().then(function (db) {
+      if (!db) return null;
+      return new Promise(function (res) {
+        try {
+          var rq = db.transaction('fav', 'readonly').objectStore('fav').get(host);
+          rq.onsuccess = function () { res(rq.result || null); };
+          rq.onerror = function () { res(null); };
+        } catch (e) { res(null); }
+      });
+    });
+  }
+  function dbPut(host, val) {
+    favDb().then(function (db) {
+      if (!db || !val) return;
+      try { db.transaction('fav', 'readwrite').objectStore('fav').put(val, host); } catch (e) {}
+    });
   }
   function probeImg(src) {
     return new Promise(function (res) {
@@ -152,7 +171,6 @@
   function loadFavUrl(host, pageUrl) {
     if (!host) return Promise.resolve(null);
     if (FAV_OBJ[host] !== undefined) return Promise.resolve(FAV_OBJ[host]);
-    if (FAV_MEM[host] !== undefined) return Promise.resolve(FAV_MEM[host]); // 已缓存（含 null 失败标记）
     if (FAV_WAIT[host]) return FAV_WAIT[host]; // 同 host 的卡片共用一次探测
     var local = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
       ? chrome.runtime.getURL('_favicon/?pageUrl=' + encodeURIComponent(pageUrl) + '&size=32')
@@ -162,42 +180,52 @@
       'https://icons.duckduckgo.com/ip3/' + host + '.ico'
     ];
     if (local) chain.push(local);
-    var usedSrc = null;
-    var p = chain.reduce(function (prev, src) {
-      return prev.then(function (u) {
-        if (u) return u;
-        if (src.indexOf('chrome-extension:') === 0) {
-          // 本地 _favicon 是同源资源，img 探测即可（无 CORS、无控制台噪音）
-          return probeImg(src).then(function (ok) { if (ok) usedSrc = src; return ok; });
-        }
-        return fetchBlob(src).then(function (blob) {
-          if (!blob) return null;
-          return new Promise(function (res) {
-            var objUrl = URL.createObjectURL(blob);
-            var im = new Image();
-            var done = false;
-            var t = setTimeout(function () { if (!done) { done = true; URL.revokeObjectURL(objUrl); res(null); } }, 6000);
-            im.onload = function () {
-              if (done) return; done = true; clearTimeout(t);
-              if (im.naturalWidth < 16) { URL.revokeObjectURL(objUrl); return res(null); } // 1x1 占位图
-              usedSrc = src;
-              var w = analyzeWhite(im); // blob 同源，canvas 可读
-              FAV_WHITE[host] = w ? 1 : 0;
-              favWhiteSave();
-              res(objUrl);
-            };
-            im.onerror = function () { if (!done) { done = true; clearTimeout(t); URL.revokeObjectURL(objUrl); res(null); } };
-            im.src = objUrl;
+    var p = dbGet(host).then(function (cached) {
+      if (cached) { // 本地持久缓存命中：零网络请求，秒出
+        if (typeof cached === 'string') { FAV_OBJ[host] = cached; return cached; }
+        var cu = URL.createObjectURL(cached);
+        FAV_OBJ[host] = cu;
+        return cu;
+      }
+      if (FAV_MEM[host] !== undefined) return FAV_MEM[host]; // 本会话已失败，不再重试
+      return chain.reduce(function (prev, src) {
+        return prev.then(function (u) {
+          if (u) return u;
+          if (src.indexOf('chrome-extension:') === 0) {
+            // 本地 _favicon 是同源资源，img 探测即可（无 CORS、无控制台噪音）
+            return probeImg(src).then(function (ok) {
+              if (ok) { FAV_OBJ[host] = src; dbPut(host, src); }
+              return ok;
+            });
+          }
+          return fetchBlob(src).then(function (blob) {
+            if (!blob) return null;
+            return new Promise(function (res) {
+              var objUrl = URL.createObjectURL(blob);
+              var im = new Image();
+              var done = false;
+              var t = setTimeout(function () { if (!done) { done = true; URL.revokeObjectURL(objUrl); res(null); } }, 6000);
+              im.onload = function () {
+                if (done) return; done = true; clearTimeout(t);
+                if (im.naturalWidth < 16) { URL.revokeObjectURL(objUrl); return res(null); } // 1x1 占位图
+                var w = analyzeWhite(im); // blob 同源，canvas 可读
+                FAV_WHITE[host] = w ? 1 : 0;
+                favWhiteSave();
+                dbPut(host, blob); // 图片字节落盘：之后所有会话本地直读，不再请求 favicon.im
+                FAV_OBJ[host] = objUrl;
+                res(objUrl);
+              };
+              im.onerror = function () { if (!done) { done = true; clearTimeout(t); URL.revokeObjectURL(objUrl); res(null); } };
+              im.src = objUrl;
+            });
           });
         });
-      });
-    }, Promise.resolve(null));
+      }, Promise.resolve(null));
+    });
     FAV_WAIT[host] = p;
     p.then(function (u) {
       delete FAV_WAIT[host];
-      FAV_MEM[host] = u ? usedSrc : null; // 持久化原始 URL，下次会话直接显示（可命中 HTTP 缓存）
-      if (u) FAV_OBJ[host] = u;
-      favMemSave();
+      if (!u) FAV_MEM[host] = null; // 仅内存标记，下个会话自动重试
     });
     return p;
   }
