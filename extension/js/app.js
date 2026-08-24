@@ -749,11 +749,13 @@
       }
       reload();
     });
-    // 书签变化实时刷新
+    // 书签变化实时刷新（onImportEnded 覆盖 HTML 批量导入：导入期间事件可能被合并，结束时统一刷新）
     chrome.bookmarks.onCreated.addListener(reload);
     chrome.bookmarks.onRemoved.addListener(reload);
     chrome.bookmarks.onChanged.addListener(reload);
     chrome.bookmarks.onMoved.addListener(reload);
+    chrome.bookmarks.onChildrenReordered.addListener(reload);
+    chrome.bookmarks.onImportEnded.addListener(reload);
 
     // 搜索
     var tm = null;
