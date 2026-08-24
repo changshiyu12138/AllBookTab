@@ -82,8 +82,17 @@
    * 1. favicon.im 高清源（最高 128px）  2. DuckDuckGo 图标  3. 本地 _favicon 缓存（仅 16/32px）
    * 全部失败保留品牌色字母圆标。结果按 host 记忆缓存，筛选重渲染不重复请求。
    * 不用内联 onerror（MV3 CSP 禁止内联事件），用 new Image() 探测。 */
-  var FAV_MEM = {};
-  try { FAV_MEM = JSON.parse(localStorage.getItem('myNavFavUrl') || '{}') || {}; } catch (e) { FAV_MEM = {}; }
+  var FAV_MEM = {};   // host -> 成功的 URL（string）或 null（全链失败）；只存结果，不存 Promise
+  try {
+    var _fm = JSON.parse(localStorage.getItem('myNavFavUrl') || '{}');
+    if (_fm && typeof _fm === 'object') {
+      Object.keys(_fm).forEach(function (k) {
+        if (_fm[k] === null || typeof _fm[k] === 'string') FAV_MEM[k] = _fm[k];
+        // 旧版本误存的 Promise 被序列化成 {} → 视为脏数据丢弃，重新探测
+      });
+    }
+  } catch (e) { FAV_MEM = {}; }
+  var FAV_WAIT = {};  // 并发去重：host -> 在途 Promise
   var FAV_MEM_TIMER = null;
   function favMemSave() {
     clearTimeout(FAV_MEM_TIMER);
@@ -107,6 +116,7 @@
   function loadFavUrl(host, pageUrl) {
     if (!host) return Promise.resolve(null);
     if (FAV_MEM[host] !== undefined) return Promise.resolve(FAV_MEM[host]);
+    if (FAV_WAIT[host]) return FAV_WAIT[host]; // 同 host 的卡片共用一次探测
     var local = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
       ? chrome.runtime.getURL('_favicon/?pageUrl=' + encodeURIComponent(pageUrl) + '&size=32')
       : null;
@@ -118,8 +128,12 @@
     var p = chain.reduce(function (prev, src) {
       return prev.then(function (u) { return u ? u : probeImg(src); });
     }, Promise.resolve(null));
-    p.then(function (u) { FAV_MEM[host] = u || null; favMemSave(); });
-    FAV_MEM[host] = p; // 并发去重：同 host 的卡片共用一次探测
+    FAV_WAIT[host] = p;
+    p.then(function (u) {
+      delete FAV_WAIT[host];
+      FAV_MEM[host] = u || null;
+      favMemSave();
+    });
     return p;
   }
   function favHtml(host, url, brand) {
@@ -149,34 +163,46 @@
     return new Promise(function (res) {
       if (!host || !src) return res(false);
       if (FAV_WHITE[host] !== undefined) return res(FAV_WHITE[host] === 1);
-      var im = new Image();
-      im.crossOrigin = 'anonymous'; // 允许 canvas 读取像素；不支持 CORS 的源会走 onerror 回退
-      var done = false;
-      var t = setTimeout(function () { if (!done) { done = true; res(false); } }, 5000);
-      im.onload = function () {
-        if (done) return; done = true; clearTimeout(t);
-        var w = false;
-        try {
-          var cv = document.createElement('canvas');
-          cv.width = cv.height = 24;
-          var cx = cv.getContext('2d');
-          cx.drawImage(im, 0, 0, 24, 24);
-          var d = cx.getImageData(0, 0, 24, 24).data;
-          var n = 0, white = 0;
-          for (var i = 0; i < d.length; i += 4) {
-            if (d[i + 3] > 200) {
-              n++;
-              if (d[i] > 235 && d[i + 1] > 235 && d[i + 2] > 235) white++;
-            }
-          }
-          if (n > 10 && white / n > 0.9) w = true;
-        } catch (e) { w = false; } // 跨域污染 canvas → 用内置清单兜底
+      if (typeof fetch !== 'function') return res(false);
+      var settled = false;
+      function finish(w) {
+        if (settled) return; settled = true;
         FAV_WHITE[host] = w ? 1 : 0;
         favWhiteSave();
         res(w);
-      };
-      im.onerror = function () { if (!done) { done = true; clearTimeout(t); res(false); } };
-      im.src = src;
+      }
+      // favicon.im 等源不发 CORS 头，crossOrigin='anonymous' 的 <img> 会被浏览器拦截并刷屏报错。
+      // 改用 fetch（manifest host_permissions 已授权）→ blob → objectURL，图片同源、canvas 可读。
+      fetch(src).then(function (r) { return r.ok ? r.blob() : null; }).then(function (blob) {
+        if (!blob) return finish(false);
+        var objUrl = URL.createObjectURL(blob);
+        var im = new Image();
+        var done = false;
+        var t = setTimeout(function () { if (!done) { done = true; URL.revokeObjectURL(objUrl); finish(false); } }, 5000);
+        im.onload = function () {
+          if (done) return; done = true; clearTimeout(t);
+          URL.revokeObjectURL(objUrl);
+          var w = false;
+          try {
+            var cv = document.createElement('canvas');
+            cv.width = cv.height = 24;
+            var cx = cv.getContext('2d');
+            cx.drawImage(im, 0, 0, 24, 24);
+            var d = cx.getImageData(0, 0, 24, 24).data;
+            var n = 0, white = 0;
+            for (var i = 0; i < d.length; i += 4) {
+              if (d[i + 3] > 200) {
+                n++;
+                if (d[i] > 235 && d[i + 1] > 235 && d[i + 2] > 235) white++;
+              }
+            }
+            if (n > 10 && white / n > 0.9) w = true;
+          } catch (e) { w = false; } // 异常兜底：内置清单仍生效
+          finish(w);
+        };
+        im.onerror = function () { if (!done) { done = true; clearTimeout(t); URL.revokeObjectURL(objUrl); finish(false); } };
+        im.src = objUrl;
+      }).catch(function () { finish(false); });
     });
   }
   function attachFavicons(root) {
