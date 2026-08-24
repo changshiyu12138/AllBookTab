@@ -1,6 +1,5 @@
-
-# 忽略 macOS 杂项
 .DS_Store
+.workbuddy/
 
 # 忽略个人原始书签（含隐私，不入库）
 bookmarks_raw.txt
