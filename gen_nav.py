@@ -5,8 +5,8 @@
 import os, re, html, json, collections
 from urllib.parse import urlparse
 
-VERSION = "v0.1"
-GEN_DATE = "2026-08-21"
+VERSION = "v0.2"
+GEN_DATE = "2026-08-24"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -22,6 +22,109 @@ result = collections.defaultdict(lambda: collections.defaultdict(list))
 for b in bookmarks:
     c = classify(b)
     result[c[0]][c[1]].append(b)
+    b["_cat"] = c[0]
+
+# ---------- 内容类型标签（v0.2：多标签体系，与分类正交） ----------
+# 每条规则: (标签名, [正则模式...])，对 标题+URL+原路径 的合并文本匹配
+TAG_RULES = [
+    ("教程课程", [r"教程", r"入门", r"指南", r"课程", r"学习", r"零基础", r"实战", r"路线",
+                r"教学", r"速成", r"小白", r"课堂", r"训练", r"tutorial", r"course", r"learn", r"study", r"camp"]),
+    ("文档手册", [r"文档", r"手册", r"规范", r"说明书", r"参考", r"datasheet", r"docs\b", r"document",
+                r"wiki", r"reference", r"\bspec\b", r"manual", r"指南针"]),
+    ("在线工具", [r"工具", r"转换", r"生成", r"计算", r"编辑", r"压缩", r"格式化", r"在线", r"检测", r"识别",
+                r"\btool", r"converter", r"generator", r"editor", r"util", r"\bcli\b"]),
+    ("代码仓库", []),  # 特殊规则：按 URL 结构判断
+    ("自建服务", []),  # 特殊规则：按 URL/路径判断
+    ("社区问答", [r"论坛", r"社区", r"问答", r"交流", r"讨论", r"forum", r"\bbbs\b", r"v2ex", r"reddit",
+                r"知乎", r"zhihu", r"segmentfault", r"stackoverflow", r"csdn", r"博客园", r"掘金", r"juejin"]),
+    ("博客文章", [r"博客", r"\bblog", r"文章", r"专栏", r"随笔", r"日志", r"笔记", r"post", r"essay",
+                r"blogspot", r"wordpress", r"ghost"]),
+    ("视频影视", [r"bilibili", r"哔哩", r"\bb站\b", r"youtube", r"视频", r"video", r"电影", r"影视", r"追剧",
+                r"美剧", r"日剧", r"动漫", r"番剧", r"anime", r"movie", r"纪录片", r"直播", r"live\b"]),
+    ("电子书",   [r"电子书", r"书库", r"图书馆", r"阅读器", r"读书", r"文库", r"\bpdf\b", r"z-?lib", r"zlibrary",
+                r"libgen", r"annas", r"kindle", r"小说", r"漫画", r"manga", r"epub", r"书单"]),
+    ("资讯新闻", [r"新闻", r"资讯", r"快讯", r"日报", r"周报", r"热点", r"时事", r"news", r"headline",
+                r"36kr", r"晚点", r"财新", r"报道", r"专栏作家"]),
+    ("下载资源", [r"下载", r"download", r"网盘", r"\bpan\b", r"资源", r"软件站", r"绿色软件", r"便携",
+                r"portable", r"磁力", r"种子", r"torrent", r"镜像", r"mirror", r" releases\b", r"破解"]),
+    ("设计素材", [r"设计", r"design", r"图标", r"\bicon", r"字体", r"font", r"配色", r"色卡", r"color",
+                r"素材", r"图库", r"壁纸", r"wallpaper", r"插画", r"\bui\b", r"figma", r"sketch",
+                r"behance", r"dribbble", r"logo", r"摄影", r"图片"]),
+    ("行情数据", [r"行情", r"k线", r"走势", r"市值", r"持仓", r"quote", r"chart", r"图表", r"数据平台",
+                r"\bapi\b", r"dashboard", r"监控", r"explorer", r"scan\b", r"链上", r"指数", r"财报",
+                r"筛选器", r"screener", r"数据"]),
+    ("游戏娱乐", [r"游戏", r"\bgame", r"steam", r"itch\.io", r"象棋", r"chess", r"俄罗斯方块", r"tetris",
+                r"2048", r"puzzle", r"数独", r"sudoku"]),
+    ("AI 对话",  [r"claude", r"chatgpt", r"openai", r"gemini", r"\bkimi\b", r"moonshot", r"\bgrok\b",
+                r"deepseek", r"豆包", r"doubao", r"qwen", r"通义", r"chat", r"聊天", r"copilot",
+                r"\bpoe\b", r"对话", r"grok", r"脑洞", r"assistant"]),
+    ("AI 应用",  [r"(?<![a-z0-9])ai(?![a-z0-9])", r"人工智能", r"大模型", r"\bllm\b", r"\bgpt", r"机器学习",
+                r"machine.?learning", r"deep.?learning", r"prompt", r"提示词", r"diffusion", r"midjourney",
+                r"绘画", r"生图", r"视频生成", r"数字人", r"语音", r"voice", r"tts", r"asr", r"字幕"]),
+    ("求职接单", [r"招聘", r"求职", r"接单", r"外包", r"远程工作", r"兼职", r"\bjob", r"hire", r"freelance",
+                r"简历", r"面试", r"薪资", r"upwork", r"猪八戒", r"程序员客栈", r"电鸭"]),
+    ("硬件资料", [r"单片机", r"\bmcu\b", r"stm32", r"芯片", r"原理图", r"schematic", r"\bpcb", r"电路",
+                r"元器件", r"电容", r"电阻", r"电感", r"\bmos\b", r"运放", r"示波器", r"焊接", r"embedded",
+                r"嵌入式", r"esp32", r"arduino", r"\brisc", r"射频", r"\brf\b", r"电源", r"电池", r"充电"]),
+    ("娱乐休闲", [r"音乐", r"歌单", r"\bmusic", r"spotify", r"电台", r"podcast", r"播客", r"笑话", r"体育",
+                r"足球", r"\bnba\b", r"旅游", r"美食", r"菜谱", r"菜鸟教程|菜谱"]),
+    ("生活服务", [r"快递", r"物流", r"缴费", r"银行", r"天气", r"地图", r"外卖", r"健康", r"医疗", r"学信",
+                r"社保", r"公积金", r"政务", r"驾校", r"驾照", r"考试报名", r"学校", r"校园", r"话费", r"流量充值"]),
+]
+TAG_RE = [(name, [re.compile(p, re.I) for p in pats]) for name, pats in TAG_RULES]
+
+# 代码仓库 / 自建服务 用 URL 结构判断；自建服务额外参考原始路径（飞牛/内网等强信号）
+RE_REPO = re.compile(r"github\.com/[^/\s]+/[^/\s]+|gitee\.com/[^/\s]+/[^/\s]+")
+RE_SELFHOST = re.compile(
+    r"jellyfin|emby|plex|qbit|aria2|alist|transmission|portainer|navidrome|"
+    r"heimdall|dashy|homepage|n8n|frp|ddns|内网|自建|192\.168\.|10\.0\.|172\.(1[6-9]|2\d|3[01])\.|localhost|:\d{4,5}")
+RE_SELFHOST_PATH = re.compile(r"飞牛|内网|自建|远程连接|服务部署")
+
+# 无匹配时的分类兜底标签
+CAT_FALLBACK_TAG = {
+    "AI 工具": "AI 应用",
+    "电子硬件": "硬件资料",
+    "金融与投资": "行情数据",
+    "NAS 与服务器": "自建服务",
+    "开发与编程": "文档手册",
+    "学习资源": "教程课程",
+    "日常娱乐": "娱乐休闲",
+    "工具与实用": "在线工具",
+    "生活与工作": "生活服务",
+    "私密": None,  # 私密内容不打标签，不进标签筛选
+}
+MAX_TAGS = 4  # 每条书签最多标签数，避免卡片臃肿
+
+def tags_of(b):
+    top = b.get("_cat", "")
+    if top == "私密":
+        return []
+    # 标签只依据标题+URL 判断（原始文件夹路径命名混乱，会引入噪声）
+    text = b["title"] + " " + b["url"]
+    matched = set()
+    if RE_REPO.search(b["url"]):
+        matched.add("代码仓库")
+    if RE_SELFHOST.search(text) or RE_SELFHOST_PATH.search(" / ".join(b["path"])):
+        matched.add("自建服务")
+    for name, regs in TAG_RE:
+        if any(r.search(text) for r in regs):
+            matched.add(name)
+    tags = [n for n, _ in TAG_RULES if n in matched][:MAX_TAGS]
+    if not tags:
+        fb = CAT_FALLBACK_TAG.get(top)
+        if fb:
+            tags = [fb]
+    return tags
+
+for b in bookmarks:
+    b["_tags"] = tags_of(b)
+
+tag_counts = collections.Counter()
+for b in bookmarks:
+    for t in b["_tags"]:
+        tag_counts[t] += 1
+# 按标签在规则表中的顺序输出（无匹配的标签不展示）
+TAGS_JSON = [[name, tag_counts[name]] for name, _ in TAG_RULES if tag_counts.get(name)]
 
 TOP_ORDER = ["AI 工具", "电子硬件", "金融与投资", "NAS 与服务器", "开发与编程",
              "学习资源", "日常娱乐", "工具与实用", "生活与工作", "私密"]
@@ -332,6 +435,32 @@ main{flex:1;min-width:0;padding:0}
 #empty{display:none;text-align:center;padding:60px 0;color:var(--muted)}
 #empty.show{display:block}
 
+/* ---------- 标签筛选 ---------- */
+.tagbar-wrap{max-width:1400px;margin:0 auto;padding:18px 28px 4px}
+.tagbar-head{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.tagbar-tip{font-size:11.5px;font-weight:500;color:var(--muted)}
+.tagbar-ops{margin-left:auto;display:flex;gap:8px}
+.tag-op{
+  font-size:12px;font-weight:600;padding:5px 13px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--border);background:var(--card);color:var(--muted);
+  transition:all .15s;font-family:inherit;
+}
+.tag-op:hover{color:var(--text);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.tag-op.on{color:#fff;background:linear-gradient(135deg,var(--accent),#0071e3);border-color:transparent}
+.tagbar{
+  display:flex;flex-wrap:wrap;gap:8px;padding:14px 16px;border-radius:16px;
+  background:var(--card);box-shadow:var(--shadow);border:1px solid var(--border);
+}
+.tag-chip{
+  font-size:12.5px;font-weight:600;padding:5px 12px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--border);background:var(--bg);color:var(--muted);
+  transition:all .15s;user-select:none;display:inline-flex;align-items:center;gap:5px;
+}
+.tag-chip:hover{color:var(--text);border-color:color-mix(in srgb,var(--accent) 45%,transparent);transform:translateY(-1px)}
+.tag-chip .tc{font-size:10.5px;font-weight:700;opacity:.55}
+.tag-chip.sel{background:linear-gradient(135deg,var(--accent),#0071e3);color:#fff;border-color:transparent}
+.tag-chip.sel .tc{opacity:.85}
+
 /* ---------- footer ---------- */
 footer{
   text-align:center;color:var(--muted);font-size:12.5px;padding:26px 0 40px;
@@ -346,6 +475,7 @@ footer b{color:var(--text)}
   .hero{padding:38px 16px 6px}
   .layout{padding:14px 16px 32px;gap:0}
   .quick-wrap{padding:20px 16px 4px}
+  .tagbar-wrap{padding:16px 16px 4px}
   .topbar{padding:12px 16px}
   .search kbd{display:none}
   .chips{top:57px}
@@ -369,12 +499,23 @@ footer b{color:var(--text)}
 <div class="hero">
   <h1>我的导航站</h1>
   <p>把散落的书签，变成自己的网络入口。</p>
-  <div class="stat"><span>共</span><b id="statTotal">0</b><span>个站点 · %CATS% 个分类 · 生成于 2026-08-21</span></div>
+  <div class="stat"><span>共</span><b id="statTotal">0</b><span>个站点 · %CATS% 个分类 · %TAGTOTAL% 个标签 · 生成于 %GEN_DATE%</span></div>
 </div>
 
 <div class="quick-wrap">
   <div class="quick-label">快捷入口</div>
   <div class="quick" id="quick"></div>
+</div>
+
+<div class="tagbar-wrap">
+  <div class="tagbar-head">
+    <span class="quick-label">标签筛选 <span class="tagbar-tip">多选标签，跨分类精准锁定书签</span></span>
+    <div class="tagbar-ops">
+      <button id="tagMode" class="tag-op" title="切换匹配模式：任意一个标签命中 / 必须同时具备全部标签">匹配任意</button>
+      <button id="tagClear" class="tag-op" title="清空已选标签">清空</button>
+    </div>
+  </div>
+  <div class="tagbar" id="tagbar"></div>
 </div>
 
 <div class="chips" id="chips"></div>
@@ -409,9 +550,16 @@ for top in TOP_ORDER:
             host = host_of(b["url"])
             letter = (b["title"].strip() or host)[0].upper()
             color = brand_color(host)
+            tag_str = ",".join(b.get("_tags", []))
+            title_attr = f' title="{esc(short_title(b))} · {esc(host)}'
+            if tag_str:
+                title_attr += f' · 标签: {esc(tag_str)}"'
+            else:
+                title_attr += '"'
             parts.append(
                 f'        <a class="link" href="{esc(b["url"])}" target="_blank" rel="noopener" '
                 f'data-w="{esc((b["title"] + " " + b["url"] + " " + host).lower())}" '
+                f'data-tags="{esc(tag_str)}"{title_attr} '
                 f'style="--brand:{color}">\n'
                 f'          <span class="fav">{esc(letter)}{favicon_img(host)}</span>\n'
                 f'          <span class="info"><span class="t">{esc(short_title(b))}</span><span class="d">{esc(host)}</span></span>\n'
@@ -543,14 +691,61 @@ const ioSub = new IntersectionObserver(function(entries){
 }, { rootMargin: '-25% 0px -65% 0px' });
 document.querySelectorAll('.sub').forEach(function(s){ ioSub.observe(s); });
 
-// ---------- 搜索 ----------
+// ---------- 标签筛选（v0.2：多选标签，与分类并存） ----------
+const TAGS = __TAGS_JSON__;
+const tagbar = document.getElementById('tagbar');
+const tagModeBtn = document.getElementById('tagMode');
+const tagClearBtn = document.getElementById('tagClear');
+const selTags = new Set();
+let tagMode = 'or';  // 'or' 任意命中 | 'and' 同时具备
+TAGS.forEach(function(t){
+  const chip = document.createElement('div');
+  chip.className = 'tag-chip';
+  chip.dataset.tag = t[0];
+  const nm = document.createElement('span'); nm.textContent = t[0];
+  const tc = document.createElement('span'); tc.className = 'tc'; tc.textContent = t[1];
+  chip.appendChild(nm); chip.appendChild(tc);
+  chip.addEventListener('click', function(){
+    if(selTags.has(t[0])){ selTags.delete(t[0]); chip.classList.remove('sel'); }
+    else{ selTags.add(t[0]); chip.classList.add('sel'); }
+    doSearch();
+  });
+  tagbar.appendChild(chip);
+});
+tagModeBtn.addEventListener('click', function(){
+  tagMode = (tagMode === 'or') ? 'and' : 'or';
+  tagModeBtn.textContent = (tagMode === 'or') ? '匹配任意' : '匹配全部';
+  tagModeBtn.classList.toggle('on', tagMode === 'and');
+  tagModeBtn.title = (tagMode === 'or') ? '当前：命中任意一个选中标签即显示。点击切换为“必须同时具备全部选中标签”'
+    : '当前：必须同时具备全部选中标签。点击切换为“命中任意一个即显示”';
+  if(selTags.size) doSearch();
+});
+tagClearBtn.addEventListener('click', function(){
+  selTags.clear();
+  document.querySelectorAll('.tag-chip.sel').forEach(function(c){ c.classList.remove('sel'); });
+  doSearch();
+});
+function tagOk(a){
+  if(selTags.size === 0) return true;
+  const t = (a.dataset.tags || '').split(',');
+  if(tagMode === 'and'){
+    let ok = true;
+    selTags.forEach(function(tag){ if(t.indexOf(tag) === -1) ok = false; });
+    return ok;
+  }
+  let ok = false;
+  selTags.forEach(function(tag){ if(t.indexOf(tag) !== -1) ok = true; });
+  return ok;
+}
+
+// ---------- 搜索（与标签筛选联动） ----------
 const q = document.getElementById('q');
 const empty = document.getElementById('empty');
 function doSearch(){
   const s = q.value.trim().toLowerCase();
   let shown = 0;
   document.querySelectorAll('.link').forEach(function(a){
-    const hit = !s || a.dataset.w.indexOf(s) !== -1;
+    const hit = (!s || a.dataset.w.indexOf(s) !== -1) && tagOk(a);
     a.classList.toggle('hide', !hit);
     if(hit) shown++;
   });
@@ -564,7 +759,7 @@ function doSearch(){
     const nv = navMap[cat.dataset.cat];
     if(nv) nv.forEach(function(el){ el.classList.toggle('hide', !any); });
   });
-  empty.classList.toggle('show', s && shown === 0);
+  empty.classList.toggle('show', (s || selTags.size) && shown === 0);
 }
 q.addEventListener('input', doSearch);
 document.addEventListener('keydown', function(e){
@@ -616,11 +811,14 @@ document.getElementById('statTotal').textContent = '__TOTAL__';
 OUT = os.path.join(HERE, "index.html")
 html_doc = "".join(parts)
 html_doc = html_doc.replace("__QUICK_JSON__", quick_json)
+html_doc = html_doc.replace("__TAGS_JSON__", json.dumps(TAGS_JSON, ensure_ascii=False))
 html_doc = html_doc.replace("__TOTAL__", total_str)
 html_doc = html_doc.replace("%TOTAL%", total_str)
 html_doc = html_doc.replace("%VERSION%", VERSION)
 html_doc = html_doc.replace("%GEN_DATE%", GEN_DATE)
 html_doc = html_doc.replace("%CATS%", str(len(cat_count)))
+html_doc = html_doc.replace("%TAGTOTAL%", str(len(TAGS_JSON)))
 with open(OUT, "w", encoding="utf-8") as f:
     f.write(html_doc)
 print(f"已生成: {OUT} ({os.path.getsize(OUT)/1024:.1f} KB, {total} 个站点, {len(quick_items)} 个快捷入口)")
+print("标签分布:", ", ".join(f"{n}({c})" for n, c in TAGS_JSON))
