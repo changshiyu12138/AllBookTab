@@ -5,7 +5,7 @@
 import os, re, html, json, collections
 from urllib.parse import urlparse
 
-VERSION = "v0.2"
+VERSION = "v0.2.1"
 GEN_DATE = "2026-08-24"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -143,17 +143,8 @@ CAT_THEME = {
     "私密":           {"accent": "#64748b", "soft": "#f1f5f9"},
 }
 
-# 快捷入口：URL 子串 -> 显示名（从书签中真实查找）
-QUICK = [
-    ("claude.ai", "Claude"), ("chat.openai.com", "ChatGPT"), ("gemini.google.com", "Gemini"),
-    ("kimi.moonshot.cn", "Kimi"), ("chat.deepseek.com", "DeepSeek"), ("grok.com", "Grok"),
-    ("github.com", "GitHub"), ("huggingface.co", "Hugging Face"), ("openrouter.ai", "OpenRouter"),
-    ("siliconflow.cn", "硅基流动"), ("modelscope.cn", "魔搭社区"), ("runoob.com", "菜鸟教程"),
-    ("szlcsc", "立创商城"), ("oshwhub", "立创EDA"), ("jellyfin", "Jellyfin"),
-    ("192.168.31.177:5666/v", "飞牛影视"), ("v2raya", "v2rayA"), ("1panel", "1Panel"),
-    ("lichess.org", "Lichess"), ("bejson", "BeJSON"), ("tradingview", "TradingView"),
-    ("z-library", "Z-Library"), ("tool77", "七七工具箱"), ("pan.baidu", "百度网盘"),
-]
+# 快捷入口：默认为空，由用户在页面上自行添加（localStorage 持久化，上限 12 个）
+QUICK = []
 
 def esc(s):
     return s.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
@@ -305,17 +296,22 @@ a{color:inherit;text-decoration:none}
 #themeBtn:hover{transform:scale(1.06)}
 #themeBtn svg{width:16px;height:16px}
 
-/* ---------- Hero ---------- */
-.hero{padding:52px 28px 10px;text-align:center}
-.hero h1{font-size:38px;font-weight:800;letter-spacing:-1px}
-.hero p{margin-top:10px;color:var(--muted);font-size:15px}
-.hero .stat{display:inline-flex;gap:6px;align-items:center;margin-top:14px;font-size:13px;color:var(--muted)}
-.hero .stat b{color:var(--accent);font-weight:700}
-
 /* ---------- 快捷入口 ---------- */
 .quick-wrap{padding:26px 28px 4px;max-width:1400px;margin:0 auto}
-.quick-label{font-size:13px;color:var(--muted);margin-bottom:12px;letter-spacing:.5px}
+.quick-label{font-size:13px;color:var(--muted);margin-bottom:12px;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+.quick-label .qcount{font-size:11px;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:1px 8px;border-radius:99px}
 .quick{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.quick-empty{
+  grid-column:1/-1;font-size:12.5px;color:var(--muted);padding:14px;border:1.5px dashed var(--border);
+  border-radius:12px;text-align:center
+}
+.qw{position:relative}
+.qdel{
+  position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:99px;border:none;cursor:pointer;
+  background:var(--text);color:var(--bg);font-size:10px;line-height:1;display:none;align-items:center;justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.25);z-index:2;padding:0
+}
+.qw:hover .qdel{display:flex}
 .q{
   display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);
   border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);
@@ -415,8 +411,16 @@ main{flex:1;min-width:0;padding:0}
 .link{
   display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--card);
   border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);min-width:0;
-  transition:transform .15s,box-shadow .15s,border-color .15s;
+  transition:transform .15s,box-shadow .15s,border-color .15s;position:relative;
 }
+.link .qadd{
+  position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:8px;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s,background .15s;padding:0;
+  background:color-mix(in srgb,var(--brand,#0071e3) 13%,transparent);color:var(--muted);z-index:2;
+}
+.link:hover .qadd{opacity:1}
+.link .qadd.on{opacity:1;color:#f5a623;background:rgba(245,166,35,.16)}
+.link .qadd:hover{transform:scale(1.12)}
 .link:hover{transform:translateY(-2px);box-shadow:0 6px 18px color-mix(in srgb,var(--brand,#0071e3) 22%,transparent);
   border-color:color-mix(in srgb,var(--brand,#0071e3) 55%,transparent)}
 .link .fav{width:32px;height:32px;border-radius:10px;font-size:14px}
@@ -431,9 +435,15 @@ main{flex:1;min-width:0;padding:0}
 .lock-hint{display:none}
 .cat[data-private="1"].collapsed .lock-hint{display:inline-flex}
 
-/* ---------- 空状态 ---------- */
+/* ---------- 空状态 / toast ---------- */
 #empty{display:none;text-align:center;padding:60px 0;color:var(--muted)}
 #empty.show{display:block}
+#toast{
+  position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(16px);opacity:0;
+  background:var(--text);color:var(--bg);padding:9px 18px;border-radius:12px;font-size:13px;font-weight:600;
+  transition:all .25s;z-index:99;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.2);max-width:80vw
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ---------- 标签筛选 ---------- */
 .tagbar-wrap{max-width:1400px;margin:0 auto;padding:18px 28px 4px}
@@ -471,8 +481,6 @@ footer b{color:var(--text)}
 .hide{display:none!important}
 
 @media (max-width:640px){
-  .hero h1{font-size:30px}
-  .hero{padding:38px 16px 6px}
   .layout{padding:14px 16px 32px;gap:0}
   .quick-wrap{padding:20px 16px 4px}
   .tagbar-wrap{padding:16px 16px 4px}
@@ -496,14 +504,8 @@ footer b{color:var(--text)}
   </button>
 </div>
 
-<div class="hero">
-  <h1>我的导航站</h1>
-  <p>把散落的书签，变成自己的网络入口。</p>
-  <div class="stat"><span>共</span><b id="statTotal">0</b><span>个站点 · %CATS% 个分类 · %TAGTOTAL% 个标签 · 生成于 %GEN_DATE%</span></div>
-</div>
-
 <div class="quick-wrap">
-  <div class="quick-label">快捷入口</div>
+  <div class="quick-label">快捷入口 <span class="qcount" id="qCount">0/12</span><span style="font-size:11px">悬停任意书签卡片，点 ☆ 收藏到这里</span></div>
   <div class="quick" id="quick"></div>
 </div>
 
@@ -575,22 +577,87 @@ parts.append('''</main>
 </footer>
 
 <script>
-// ---------- 快捷入口 ----------
-const QUICK = __QUICK_JSON__;
+// ---------- 快捷入口（用户自定义 · localStorage 持久化 · 上限 12 个） ----------
+const QUICK_MAX = 12;
+const LS_QUICK = 'myNavQuickV1';
+const QUICK_SEED = __QUICK_JSON__;
+let quickData = null;
+try{ quickData = JSON.parse(localStorage.getItem(LS_QUICK) || 'null'); }catch(e){}
+if(!Array.isArray(quickData)) quickData = QUICK_SEED.slice();
 const qWrap = document.getElementById('quick');
+const qCount = document.getElementById('qCount');
 function favImg(host){
   if(!host || /^\\d+\\.\\d+\\.\\d+\\.\\d+/.test(host) || host.indexOf('localhost') !== -1) return '';
   const d = host.split(':')[0];
   return '<img class="favi" src="https://favicon.im/' + d + '?larger=true" loading="lazy" alt="" referrerpolicy="no-referrer" '
     + "onerror=\\"if(this.dataset.f){this.style.display='none'}else{this.dataset.f=1;this.src='https://icons.duckduckgo.com/ip3/" + d + ".ico'}\\">";
 }
-qWrap.innerHTML = QUICK.map(function(it){
-  const url = it[0], name = it[1], host = it[2], color = it[3] || '#0071e3';
-  const h = (host || '').charAt(0).toUpperCase() || name.charAt(0);
-  return '<a class="q" href="' + url + '" target="_blank" rel="noopener" title="' + name + ' · ' + host + '" style="--brand:' + color + '">'
-    + '<span class="fav">' + h + favImg(host) + '</span>'
-    + '<span class="n">' + name + '</span></a>';
-}).join('');
+function saveQuick(){ try{ localStorage.setItem(LS_QUICK, JSON.stringify(quickData)); }catch(e){} }
+function escQ(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+let toastTimer = null;
+function toast(msg){
+  let t = document.getElementById('toast');
+  if(!t){ t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 1800);
+}
+function quickRender(){
+  qCount.textContent = quickData.length + '/' + QUICK_MAX;
+  if(quickData.length === 0){
+    qWrap.innerHTML = '<div class="quick-empty">暂无快捷入口 · 悬停任意书签卡片点击 ☆ 即可收藏到这里（最多 ' + QUICK_MAX + ' 个，保存在本机浏览器）</div>';
+    return;
+  }
+  qWrap.innerHTML = quickData.map(function(it, idx){
+    const url = it[0], name = it[1], host = it[2], color = it[3] || '#0071e3';
+    const h = (host || '').charAt(0).toUpperCase() || name.charAt(0);
+    return '<div class="qw" style="--brand:' + color + '">'
+      + '<a class="q" href="' + escQ(url) + '" target="_blank" rel="noopener" title="' + escQ(name) + ' · ' + escQ(host) + '">'
+      + '<span class="fav">' + h + favImg(host) + '</span>'
+      + '<span class="n">' + escQ(name) + '</span></a>'
+      + '<button class="qdel" data-i="' + idx + '" title="移除该快捷入口">✕</button></div>';
+  }).join('');
+}
+qWrap.addEventListener('click', function(e){
+  const btn = e.target.closest('.qdel');
+  if(!btn) return;
+  e.preventDefault();
+  quickData.splice(+btn.dataset.i, 1);
+  saveQuick(); quickRender(); syncStars();
+  toast('已从快捷入口移除');
+});
+function quickIndexOf(url){ return quickData.findIndex(function(it){ return it[0] === url; }); }
+function syncStars(){
+  document.querySelectorAll('.link').forEach(function(a){ if(a._qsync) a._qsync(); });
+}
+const STAR = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2.9 6.26 6.85.7-5.1 4.6 1.43 6.72L12 16.9 5.92 20.28l1.43-6.72-5.1-4.6 6.85-.7z"/></svg>';
+document.querySelectorAll('.link').forEach(function(a){
+  const btn = document.createElement('button');
+  btn.className = 'qadd'; btn.type = 'button';
+  btn.title = '添加到快捷入口'; btn.innerHTML = STAR;
+  a._qsync = function(){
+    const on = quickIndexOf(a.getAttribute('href')) !== -1;
+    btn.classList.toggle('on', on);
+    btn.title = on ? '从快捷入口移除' : '添加到快捷入口';
+  };
+  btn.addEventListener('click', function(e){
+    e.preventDefault(); e.stopPropagation();
+    const url = a.getAttribute('href');
+    const i = quickIndexOf(url);
+    if(i !== -1){
+      quickData.splice(i, 1); saveQuick(); quickRender(); a._qsync();
+      toast('已从快捷入口移除'); return;
+    }
+    if(quickData.length >= QUICK_MAX){ toast('快捷入口已满（上限 ' + QUICK_MAX + ' 个），先移除一个吧'); return; }
+    const host = (a.querySelector('.d') || {}).textContent || '';
+    const name = (a.querySelector('.t') || {}).textContent || host || url;
+    const color = (a.style.getPropertyValue('--brand') || '').trim() || '#0071e3';
+    quickData.push([url, name, host, color]);
+    saveQuick(); quickRender(); a._qsync();
+    toast('已添加到快捷入口（' + quickData.length + '/' + QUICK_MAX + '）');
+  });
+  a.appendChild(btn); a._qsync();
+});
+quickRender();
 
 // ---------- 侧边栏 / 分类快速导航（含二级子分类） ----------
 const catEls = document.querySelectorAll('.cat');
@@ -800,9 +867,6 @@ try{
   const saved = localStorage.getItem('nav-theme');
   setTheme(saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 }catch(e){ setTheme('light'); }
-
-// 统计数
-document.getElementById('statTotal').textContent = '__TOTAL__';
 </script>
 </body>
 </html>
