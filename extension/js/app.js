@@ -59,26 +59,71 @@
   }
 
   // ============ favicon ============
-  /* MV3 中不能直接用 chrome://favicon2/ 作为 <img src>（CSP 拦截），
-   * 正确方式：chrome.runtime.getURL('/_favicon/?pageUrl=...')（需 manifest 的 favicon 权限）。
-   * 也不用内联 onerror（MV3 CSP 禁止内联事件），改为渲染后异步探测，成功才插入 img，
-   * 失败则保留品牌色字母圆标兜底。 */
+  /* 三级加载链（解决低分辨率）：
+   * 1. favicon.im 高清源（最高 128px）  2. DuckDuckGo 图标  3. 本地 _favicon 缓存（仅 16/32px）
+   * 全部失败保留品牌色字母圆标。结果按 host 记忆缓存，筛选重渲染不重复请求。
+   * 不用内联 onerror（MV3 CSP 禁止内联事件），用 new Image() 探测。 */
+  var FAV_MEM = {};
+  try { FAV_MEM = JSON.parse(localStorage.getItem('myNavFavUrl') || '{}') || {}; } catch (e) { FAV_MEM = {}; }
+  var FAV_MEM_TIMER = null;
+  function favMemSave() {
+    clearTimeout(FAV_MEM_TIMER);
+    FAV_MEM_TIMER = setTimeout(function () {
+      try { localStorage.setItem('myNavFavUrl', JSON.stringify(FAV_MEM)); } catch (e) {}
+    }, 800);
+  }
+  function probeImg(src) {
+    return new Promise(function (res) {
+      var im = new Image();
+      var done = false;
+      var t = setTimeout(function () { if (!done) { done = true; res(null); } }, 6000);
+      im.onload = function () {
+        if (done) return; done = true; clearTimeout(t);
+        res(im.naturalWidth >= 16 ? src : null); // 过滤 1x1 占位图
+      };
+      im.onerror = function () { if (!done) { done = true; clearTimeout(t); res(null); } };
+      im.src = src;
+    });
+  }
+  function loadFavUrl(host, pageUrl) {
+    if (!host) return Promise.resolve(null);
+    if (FAV_MEM[host] !== undefined) return Promise.resolve(FAV_MEM[host]);
+    var local = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
+      ? chrome.runtime.getURL('_favicon/?pageUrl=' + encodeURIComponent(pageUrl) + '&size=32')
+      : null;
+    var chain = [
+      'https://favicon.im/' + host + '?larger=true',
+      'https://icons.duckduckgo.com/ip3/' + host + '.ico'
+    ];
+    if (local) chain.push(local);
+    var p = chain.reduce(function (prev, src) {
+      return prev.then(function (u) { return u ? u : probeImg(src); });
+    }, Promise.resolve(null));
+    p.then(function (u) { FAV_MEM[host] = u || null; favMemSave(); });
+    FAV_MEM[host] = p; // 并发去重：同 host 的卡片共用一次探测
+    return p;
+  }
   function favHtml(host, url, brand) {
     var letter = (host || '?').replace(/^www\./, '').charAt(0).toUpperCase() || '?';
-    return '<span class="fav" style="--brand:' + brand + '" data-bu="' + esc(url) + '">' + letter + '</span>';
+    return '<span class="fav" style="--brand:' + brand + '" data-bh="' + esc(host || '') + '" data-bu="' + esc(url) + '">' + letter + '</span>';
   }
   function attachFavicons(root) {
     (root || document).querySelectorAll('.fav[data-bu]').forEach(function (span) {
       var u = span.getAttribute('data-bu');
+      var h = span.getAttribute('data-bh');
       span.removeAttribute('data-bu');
-      if (!u || typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.getURL) return;
-      var img = new Image();
-      img.className = 'favi';
-      img.onload = function () {
-        span.textContent = '';
-        span.appendChild(img);
-      };
-      img.src = chrome.runtime.getURL('_favicon/?pageUrl=' + encodeURIComponent(u) + '&size=64');
+      span.removeAttribute('data-bh');
+      loadFavUrl(h, u).then(function (src) {
+        if (!src || !span.isConnected) return;
+        var img = new Image();
+        img.className = 'favi';
+        img.onload = function () {
+          if (!span.isConnected) return;
+          span.textContent = '';
+          span.appendChild(img);
+        };
+        img.src = src;
+      });
     });
   }
 
