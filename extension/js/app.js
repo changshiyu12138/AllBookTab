@@ -166,7 +166,7 @@
     el.innerHTML = quick.map(function (q, i) {
       var host = C.hostOf(q.u);
       return '<div class="qw"><button class="qdel" data-qi="' + i + '" title="移除">✕</button>' +
-        '<a class="q" href="' + esc(q.u) + '" style="--brand:' + C.brandColor(host) + '">' +
+        '<a class="q" href="' + esc(q.u) + '" target="_blank" rel="noopener" style="--brand:' + C.brandColor(host) + '">' +
         favHtml(host, q.u, C.brandColor(host)) + '<span class="n">' + esc(q.t) + '</span></a></div>';
     }).join('');
     attachFavicons(el);
