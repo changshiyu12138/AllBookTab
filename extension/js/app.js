@@ -59,11 +59,27 @@
   }
 
   // ============ favicon ============
+  /* MV3 中不能直接用 chrome://favicon2/ 作为 <img src>（CSP 拦截），
+   * 正确方式：chrome.runtime.getURL('/_favicon/?pageUrl=...')（需 manifest 的 favicon 权限）。
+   * 也不用内联 onerror（MV3 CSP 禁止内联事件），改为渲染后异步探测，成功才插入 img，
+   * 失败则保留品牌色字母圆标兜底。 */
   function favHtml(host, url, brand) {
-    var fu = 'chrome://favicon2/?size=64&page_scale_factor=2&page_url=' + encodeURIComponent(url);
     var letter = (host || '?').replace(/^www\./, '').charAt(0).toUpperCase() || '?';
-    return '<span class="fav" style="--brand:' + brand + '">' + letter +
-      '<img class="favi" src="' + fu + '" alt="" loading="lazy" onerror="this.remove()"></span>';
+    return '<span class="fav" style="--brand:' + brand + '" data-bu="' + esc(url) + '">' + letter + '</span>';
+  }
+  function attachFavicons(root) {
+    (root || document).querySelectorAll('.fav[data-bu]').forEach(function (span) {
+      var u = span.getAttribute('data-bu');
+      span.removeAttribute('data-bu');
+      if (!u || typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.getURL) return;
+      var img = new Image();
+      img.className = 'favi';
+      img.onload = function () {
+        span.textContent = '';
+        span.appendChild(img);
+      };
+      img.src = chrome.runtime.getURL('_favicon/?pageUrl=' + encodeURIComponent(u) + '&size=64');
+    });
   }
 
   // ============ 筛选 ============
@@ -108,6 +124,7 @@
         '<a class="q" href="' + esc(q.u) + '" style="--brand:' + C.brandColor(host) + '">' +
         favHtml(host, q.u, C.brandColor(host)) + '<span class="n">' + esc(q.t) + '</span></a></div>';
     }).join('');
+    attachFavicons(el);
     el.querySelectorAll('.qdel').forEach(function (btn) {
       btn.onclick = function (e) {
         e.preventDefault();
@@ -236,6 +253,7 @@
       html += '</div></section>';
     });
     $('main').innerHTML = html;
+    attachFavicons($('main'));
     $('empty').classList.toggle('show', shown === 0);
 
     // 折叠
