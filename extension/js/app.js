@@ -7,9 +7,10 @@
   var QUICK_MAX = 12;
   var LS_QUICK = 'myNavQuickV1';
   var LS_THEME = 'myNavThemeV1';
+  var LS_OVERRIDE = 'myNavOverrideV1'; // {bookmarkId: [cat, sub]} 拖拽自定义分类
 
   // ============ 全局状态 ============
-  var ALL = [];          // 全部有效书签 [{id,title,url,cat,sub,tags,dup,host}]
+  var ALL = [];          // 全部有效书签 [{id,title,url,cat,sub,tags,dup,host,custom}]
   var INVALID = [];      // 无效书签（chrome:// 等）
   var DUPS = [];         // 重复书签（每组保留首个，其余在此）
   var quick = [];        // 快捷入口 [{t,u}]
@@ -17,6 +18,8 @@
   var tagModeAny = true; // true=任一命中 false=全部命中
   var kw = '';           // 搜索词
   var observer = null;
+  var OVERRIDES = {};    // 用户拖拽指定的分类 {id: [cat, sub]}
+  var DRAG_ID = null;    // 正在拖拽的书签 id
 
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) {
@@ -43,6 +46,8 @@
         if (C.isGarbage(b)) { invalid.push(b); return; }
         var cs = C.classify(b);
         b.cat = cs[0]; b.sub = cs[1];
+        var ov = OVERRIDES[b.id]; // 用户拖拽指定的分类优先于自动分类
+        if (ov && ov[0]) { b.cat = ov[0]; b.sub = ov[1] || '未分类'; b.custom = true; }
         b.tags = C.tagsOf(b, b.cat);
         b.host = C.hostOf(b.url);
         out.push(b);
@@ -105,14 +110,66 @@
   }
   function favHtml(host, url, brand) {
     var letter = (host || '?').replace(/^www\./, '').charAt(0).toUpperCase() || '?';
-    return '<span class="fav" style="--brand:' + brand + '" data-bh="' + esc(host || '') + '" data-bu="' + esc(url) + '">' + letter + '</span>';
+    return '<span class="fav' + (isWhiteHost(host) ? ' fav-white' : '') + '" style="--brand:' + brand + '" data-h="' + esc(host || '') + '" data-bu="' + esc(url) + '">' + letter + '</span>';
+  }
+
+  /* ---------- 白色图标检测 ----------
+   * 部分 logo 是纯白色（如通义千问），放在白色底衬上会隐形。
+   * 图标加载后用 canvas 采样像素：近白不透明像素占比 > 90% 判定为白色图标，
+   * 给圆标换深色底衬。结果按 host 缓存；canvas 跨域读取失败时回退到内置清单。 */
+  var WHITE_HOSTS = ['tongyi.aliyun.com', 'tongyi.com', 'www.tongyi.com', 'qwen.com',
+    'www.qwen.com', 'chat.qwen.ai', 'qwen.ai'];
+  var FAV_WHITE = {};
+  try { FAV_WHITE = JSON.parse(localStorage.getItem('myNavFavWhite') || '{}') || {}; } catch (e) { FAV_WHITE = {}; }
+  var FAV_WHITE_TIMER = null;
+  function favWhiteSave() {
+    clearTimeout(FAV_WHITE_TIMER);
+    FAV_WHITE_TIMER = setTimeout(function () {
+      try { localStorage.setItem('myNavFavWhite', JSON.stringify(FAV_WHITE)); } catch (e) {}
+    }, 800);
+  }
+  function isWhiteHost(host) {
+    return FAV_WHITE[host] === 1 || WHITE_HOSTS.indexOf(host) !== -1;
+  }
+  function detectWhite(src, host) {
+    return new Promise(function (res) {
+      if (!host || !src) return res(false);
+      if (FAV_WHITE[host] !== undefined) return res(FAV_WHITE[host] === 1);
+      var im = new Image();
+      im.crossOrigin = 'anonymous'; // 允许 canvas 读取像素；不支持 CORS 的源会走 onerror 回退
+      var done = false;
+      var t = setTimeout(function () { if (!done) { done = true; res(false); } }, 5000);
+      im.onload = function () {
+        if (done) return; done = true; clearTimeout(t);
+        var w = false;
+        try {
+          var cv = document.createElement('canvas');
+          cv.width = cv.height = 24;
+          var cx = cv.getContext('2d');
+          cx.drawImage(im, 0, 0, 24, 24);
+          var d = cx.getImageData(0, 0, 24, 24).data;
+          var n = 0, white = 0;
+          for (var i = 0; i < d.length; i += 4) {
+            if (d[i + 3] > 200) {
+              n++;
+              if (d[i] > 235 && d[i + 1] > 235 && d[i + 2] > 235) white++;
+            }
+          }
+          if (n > 10 && white / n > 0.9) w = true;
+        } catch (e) { w = false; } // 跨域污染 canvas → 用内置清单兜底
+        FAV_WHITE[host] = w ? 1 : 0;
+        favWhiteSave();
+        res(w);
+      };
+      im.onerror = function () { if (!done) { done = true; clearTimeout(t); res(false); } };
+      im.src = src;
+    });
   }
   function attachFavicons(root) {
     (root || document).querySelectorAll('.fav[data-bu]').forEach(function (span) {
       var u = span.getAttribute('data-bu');
-      var h = span.getAttribute('data-bh');
+      var h = span.getAttribute('data-h');
       span.removeAttribute('data-bu');
-      span.removeAttribute('data-bh');
       loadFavUrl(h, u).then(function (src) {
         if (!src || !span.isConnected) return;
         var img = new Image();
@@ -121,6 +178,11 @@
           if (!span.isConnected) return;
           span.textContent = '';
           span.appendChild(img);
+          if (!span.classList.contains('fav-white')) {
+            detectWhite(src, h).then(function (w) {
+              if (w && span.isConnected) span.classList.add('fav-white');
+            });
+          }
         };
         img.src = src;
       });
@@ -143,6 +205,41 @@
       }
     }
     return true;
+  }
+
+  // ============ 分类覆盖（拖拽自定义） ============
+  function saveOverrides() {
+    try { chrome.storage.local.set({ myNavOverrideV1: OVERRIDES }); } catch (e) {}
+    try { localStorage.setItem(LS_OVERRIDE, JSON.stringify(OVERRIDES)); } catch (e) {}
+  }
+  function assignOverride(id, cat, sub) {
+    var b = null;
+    for (var i = 0; i < ALL.length; i++) if (ALL[i].id === id) { b = ALL[i]; break; }
+    if (!b || !cat) return;
+    OVERRIDES[id] = [cat, sub || '未分类'];
+    saveOverrides();
+    toast('已将「' + b.title.slice(0, 16) + '」移到 ' + cat + ' / ' + (sub || '未分类'));
+    reload();
+  }
+  function promptNewCat(id) {
+    var name = prompt('新分类名称（可用「分类/子分类」格式，如：学习资源/竞赛）');
+    if (!name) return;
+    name = name.trim();
+    if (!name) return;
+    var i = name.indexOf('/');
+    var cat = (i > 0 ? name.slice(0, i) : name).trim();
+    var sub = (i > 0 ? name.slice(i + 1) : '').trim() || '未分类';
+    if (!cat) return;
+    assignOverride(id, cat, sub);
+  }
+
+  // 自定义分类的主题色（内置没有的颜色按名字哈希取色）
+  var CUSTOM_PALETTE = ['#7c3aed', '#0ea5e9', '#f97316', '#e11d48', '#16a34a', '#0891b2', '#db2777', '#8b5cf6', '#d97706'];
+  function themeColor(cat) {
+    if (C.CAT_THEME[cat]) return C.CAT_THEME[cat];
+    var h = 0;
+    for (var i = 0; i < cat.length; i++) h = (h * 31 + cat.charCodeAt(i)) >>> 0;
+    return CUSTOM_PALETTE[h % CUSTOM_PALETTE.length];
   }
 
   // ============ 渲染 ============
@@ -209,24 +306,46 @@
     $('tagClearBtn').classList.toggle('on', selTags.length > 0);
   }
 
+  // 拖拽放置目标绑定
+  function bindDrop(el, getCatSub) {
+    el.addEventListener('dragover', function (e) {
+      if (!DRAG_ID) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drop-hover');
+    });
+    el.addEventListener('dragleave', function () { el.classList.remove('drop-hover'); });
+    el.addEventListener('drop', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('drop-hover');
+      if (!DRAG_ID) return;
+      var cs = getCatSub();
+      if (cs) assignOverride(DRAG_ID, cs[0], cs[1]);
+      DRAG_ID = null;
+    });
+  }
+
   function renderSidebar(catStats, subStats) {
     var html = '';
     catStats.forEach(function (cs) {
       var open = cs.cat === 'AI 工具' || catStats.length <= 3;
       html += '<div class="side-group' + (open ? ' open' : '') + '" data-cat="' + esc(cs.cat) + '">' +
-        '<div class="side-item" data-cat="' + esc(cs.cat) + '"><span class="dot" style="background:' + C.CAT_THEME[cs.cat] + '"></span>' +
+        '<div class="side-item" data-cat="' + esc(cs.cat) + '"><span class="dot" style="background:' + themeColor(cs.cat) + '"></span>' +
         '<span class="nm">' + esc(cs.cat) + '</span><span class="n">' + cs.n + '</span>' +
         '<span class="chev"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></span></div>' +
         '<div class="side-subs">';
       (subStats[cs.cat] || []).forEach(function (ss) {
-        html += '<div class="side-sub" data-sub="' + esc(ss.sub) + '"><span class="snm">' + esc(ss.sub) + '</span><span class="sn">' + ss.n + '</span></div>';
+        html += '<div class="side-sub" data-cat="' + esc(cs.cat) + '" data-sub="' + esc(ss.sub) + '"><span class="snm">' + esc(ss.sub) + '</span><span class="sn">' + ss.n + '</span></div>';
       });
       html += '</div></div>';
     });
+    html += '<div class="side-new" id="sideNew"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新建分类<small>拖到此处</small></div>';
     $('sideList').innerHTML = html;
 
     $('sideList').querySelectorAll('.side-item').forEach(function (it) {
       it.onclick = function () { it.parentElement.classList.toggle('open'); };
+      bindDrop(it, function () { return [it.dataset.cat, '未分类']; });
     });
     $('sideList').querySelectorAll('.side-sub').forEach(function (it) {
       it.onclick = function () {
@@ -238,11 +357,29 @@
           setActiveSub(it.dataset.sub);
         }
       };
+      bindDrop(it, function () { return [it.dataset.cat, it.dataset.sub]; });
+    });
+    // sideNew：拖拽高亮 + 放置弹窗新建分类
+    var sideNew = $('sideNew');
+    sideNew.addEventListener('dragover', function (e) {
+      if (!DRAG_ID) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      sideNew.classList.add('drop-hover');
+    });
+    sideNew.addEventListener('dragleave', function () { sideNew.classList.remove('drop-hover'); });
+    sideNew.addEventListener('drop', function (e) {
+      e.preventDefault();
+      sideNew.classList.remove('drop-hover');
+      if (!DRAG_ID) return;
+      var id = DRAG_ID;
+      DRAG_ID = null;
+      promptNewCat(id);
     });
 
     // 窄屏 chips
     $('chips').innerHTML = catStats.map(function (cs) {
-      return '<span class="chip" data-cat="' + esc(cs.cat) + '"><span class="cdot" style="background:' + C.CAT_THEME[cs.cat] + '"></span>' + esc(cs.cat) + '</span>';
+      return '<span class="chip" data-cat="' + esc(cs.cat) + '"><span class="cdot" style="background:' + themeColor(cs.cat) + '"></span>' + esc(cs.cat) + '</span>';
     }).join('');
     $('chips').querySelectorAll('.chip').forEach(function (c) {
       c.onclick = function () {
@@ -255,10 +392,11 @@
   function cardHtml(b) {
     var brand = C.brandColor(b.host);
     var on = isQuick(b.url);
-    return '<a class="link" href="' + esc(b.url) + '" target="_blank" rel="noopener" style="--brand:' + brand + '" data-tags="' + esc(b.tags.join(',')) + '">' +
+    return '<a class="link" draggable="true" data-bid="' + esc(b.id) + '" href="' + esc(b.url) + '" target="_blank" rel="noopener" style="--brand:' + brand + '" data-tags="' + esc(b.tags.join(',')) + '" title="按住可拖拽到左侧侧边栏调整分类">' +
       '<button class="qadd' + (on ? ' on' : '') + '" data-url="' + esc(b.url) + '" data-title="' + esc(b.title) + '" title="' + (on ? '从快捷入口移除' : '加入快捷入口') + '">' + (on ? '★' : '☆') + '</button>' +
       favHtml(b.host, b.url, brand) +
       '<span class="info"><span class="t">' + esc(b.title) + '</span><span class="d">' + esc(b.host) + '</span></span>' +
+      (b.custom ? '<button class="reauto" data-bid="' + esc(b.id) + '" title="这个分类是我手动指定的，点击恢复自动分类">↺</button>' : '') +
       (b.dup ? '<span class="dupflag" title="检测到重复书签">重复</span>' : '') +
       '</a>';
   }
@@ -271,9 +409,27 @@
       shown++;
       (byCat[b.cat] = byCat[b.cat] || {})[b.sub] = (byCat[b.cat][b.sub] || 0) + 1;
     });
+    var inOrder = {};
+    C.CAT_ORDER.forEach(function (co) { inOrder[co[0]] = 1; });
     C.CAT_ORDER.forEach(function (co) {
       var cat = co[0];
       if (!byCat[cat]) return;
+      var subs = Object.keys(byCat[cat]);
+      var n = 0;
+      subs.forEach(function (s) { n += byCat[cat][s]; });
+      catStats.push({ cat: cat, n: n });
+      subStats[cat] = subs.sort(function (a, b) { return byCat[cat][b] - byCat[cat][a]; })
+        .map(function (s) { return { sub: s, n: byCat[cat][s] }; });
+    });
+    // 用户拖拽创建的自定义分类（不在内置顺序表里的）追加在后面，按数量排序
+    var customs = Object.keys(byCat).filter(function (c) { return !inOrder[c]; })
+      .sort(function (a, b) {
+        var na = 0, nb = 0;
+        Object.keys(byCat[a]).forEach(function (s) { na += byCat[a][s]; });
+        Object.keys(byCat[b]).forEach(function (s) { nb += byCat[b][s]; });
+        return nb - na;
+      });
+    customs.forEach(function (cat) {
       var subs = Object.keys(byCat[cat]);
       var n = 0;
       subs.forEach(function (s) { n += byCat[cat][s]; });
@@ -286,7 +442,7 @@
     catStats.forEach(function (cs) {
       var priv = cs.cat === '私密' ? ' data-private="1"' : '';
       html += '<section class="cat" data-cat="' + esc(cs.cat) + '"' + priv + ' id="cat-' + hashId(cs.cat) + '">' +
-        '<div class="cat-head"><span class="dot" style="background:' + C.CAT_THEME[cs.cat] + '"></span>' +
+        '<div class="cat-head"><span class="dot" style="background:' + themeColor(cs.cat) + '"></span>' +
         '<span class="t">' + esc(cs.cat) + '</span><span class="count">' + cs.n + '</span>' +
         '<span class="lock-hint" style="font-size:11px;color:var(--muted)">🔒 点击解锁</span>' +
         '<span class="arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="subs">';
@@ -311,6 +467,35 @@
           return;
         }
         cat.classList.toggle('collapsed');
+      };
+    });
+    // 拖拽：卡片为拖拽源
+    document.querySelectorAll('.link[draggable]').forEach(function (a) {
+      a.addEventListener('dragstart', function (e) {
+        DRAG_ID = a.dataset.bid;
+        try {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', 'my-nav:' + a.dataset.bid);
+        } catch (err) {}
+        document.body.classList.add('dragging');
+        a.classList.add('drag-src');
+      });
+      a.addEventListener('dragend', function () {
+        DRAG_ID = null;
+        document.body.classList.remove('dragging');
+        a.classList.remove('drag-src');
+        document.querySelectorAll('.drop-hover').forEach(function (el) { el.classList.remove('drop-hover'); });
+      });
+    });
+    // 恢复自动分类
+    document.querySelectorAll('.reauto').forEach(function (btn) {
+      btn.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        delete OVERRIDES[btn.dataset.bid];
+        saveOverrides();
+        toast('已恢复自动分类');
+        reload();
       };
     });
     // 快捷入口开关
@@ -475,6 +660,12 @@
     flatten(tree, ALL, INVALID);
     ALL.sort(function (a, b) { return (a.dateAdded || 0) - (b.dateAdded || 0); });
     markDups();
+    // 清理已删除书签的孤儿覆盖记录
+    var ids = {};
+    ALL.forEach(function (b) { ids[b.id] = 1; });
+    var dirty = false;
+    Object.keys(OVERRIDES).forEach(function (k) { if (!ids[k]) { delete OVERRIDES[k]; dirty = true; } });
+    if (dirty) saveOverrides();
     renderStats(); renderTagbar(); renderMain(); renderQuick();
   }
 
@@ -484,9 +675,16 @@
     // 主题（storage 优先，localStorage 兜底）
     var dark = false;
     try { dark = !!JSON.parse(localStorage.getItem(LS_THEME) || 'null'); } catch (e) {}
-    chrome.storage.local.get([LS_THEME, LS_QUICK], function (cfg) {
+    try {
+      var ov = JSON.parse(localStorage.getItem(LS_OVERRIDE) || 'null');
+      if (ov && typeof ov === 'object') OVERRIDES = ov;
+    } catch (e) {}
+    chrome.storage.local.get([LS_THEME, LS_QUICK, 'myNavOverrideV1'], function (cfg) {
       if (cfg && cfg[LS_THEME]) dark = true;
       applyTheme(dark);
+      if (cfg && cfg.myNavOverrideV1 && typeof cfg.myNavOverrideV1 === 'object') {
+        OVERRIDES = cfg.myNavOverrideV1;
+      }
       if (cfg && Array.isArray(cfg[LS_QUICK])) {
         quick = cfg[LS_QUICK].slice(0, QUICK_MAX);
       } else {

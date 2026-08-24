@@ -84,6 +84,9 @@ a{color:inherit;text-decoration:none}
   position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;
   background:#fff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);
 }
+/* 白色 logo（如通义千问）：换深色底衬避免与白色背景融为一体 */
+.fav.fav-white .favi{background:#2e2e33}
+.fav.fav-white{box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
 
 /* ---------- 布局 ---------- */
 .layout{max-width:1400px;margin:0 auto;padding:20px 28px 40px;display:flex;gap:34px;align-items:flex-start}
@@ -117,6 +120,36 @@ a{color:inherit;text-decoration:none}
 .side-sub.active{background:var(--card);color:var(--text)}
 .side-sub .snm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .side-sub .sn{margin-left:auto;font-size:10.5px;color:var(--muted);flex-shrink:0}
+
+/* ---------- 拖拽调整分类 ---------- */
+.side-item.drop-hover,.side-sub.drop-hover{
+  background:color-mix(in srgb,var(--accent) 13%,transparent);
+  box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent) 55%,transparent);
+  color:var(--accent);
+}
+.link.drag-src{opacity:.35}
+.link[draggable]{-webkit-user-drag:element;user-select:none}
+.side-new{
+  display:none;margin:10px 6px 4px;padding:10px 12px;border-radius:12px;cursor:copy;
+  border:1.5px dashed color-mix(in srgb,var(--accent) 45%,transparent);
+  color:var(--accent);font-size:12.5px;font-weight:700;align-items:center;justify-content:center;gap:6px;
+  background:color-mix(in srgb,var(--accent) 6%,transparent);transition:background .15s;
+}
+.side-new small{font-weight:500;opacity:.65}
+body.dragging .side-new{display:flex}
+.side-new.drop-hover{
+  background:color-mix(in srgb,var(--accent) 16%,transparent);
+  box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+.link .reauto{
+  position:absolute;bottom:6px;left:8px;width:20px;height:20px;border-radius:7px;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;padding:0;
+  background:color-mix(in srgb,var(--brand,#0071e3) 13%,transparent);color:var(--muted);
+  font-size:11px;line-height:1;z-index:2;
+}
+.link:hover .reauto{opacity:1}
+.link .reauto:hover{color:var(--accent);transform:scale(1.1)}
+.side-tip{font-size:10.5px;color:var(--muted);margin:-5px 12px 9px;opacity:.75}
 
 /* ---------- 窄屏横滑标签条 ---------- */
 .chips{
