@@ -91,7 +91,7 @@
   var FAV_MEM = {};   // 内存级：host -> null（本会话全链失败的临时标记，不落盘）
   var FAV_OBJ = {};   // host -> blob:objectURL 或本地 URL（本会话显示用）
   var FAV_WAIT = {};  // 并发去重：host -> 在途 Promise
-  try { localStorage.removeItem('myNavFavUrl'); } catch (e) {} // 清掉旧版 URL 缓存
+  try { localStorage.removeItem('myNavFavUrl'); localStorage.removeItem('myNavFavWhite'); } catch (e) {} // 清掉旧版缓存
   var FAV_DB = null;
   function favDb() {
     if (FAV_DB) return Promise.resolve(FAV_DB);
@@ -208,12 +208,9 @@
               im.onload = function () {
                 if (done) return; done = true; clearTimeout(t);
                 if (im.naturalWidth < 16) { URL.revokeObjectURL(objUrl); return res(null); } // 1x1 占位图
-                var w = analyzeWhite(im); // blob 同源，canvas 可读
-                FAV_WHITE[host] = w ? 1 : 0;
-                favWhiteSave();
                 dbPut(host, blob); // 图片字节落盘：之后所有会话本地直读，不再请求 favicon.im
                 FAV_OBJ[host] = objUrl;
-                res(objUrl);
+                res(objUrl); // 白色检测统一在显示时（attachFavicons）做
               };
               im.onerror = function () { if (!done) { done = true; clearTimeout(t); URL.revokeObjectURL(objUrl); res(null); } };
               im.src = objUrl;
@@ -237,16 +234,19 @@
   /* ---------- 白色图标检测 ----------
    * 部分 logo 是纯白色（如通义千问），放在白色底衬上会隐形。
    * 图标加载后用 canvas 采样像素：近白不透明像素占比 > 90% 判定为白色图标，
-   * 给圆标换深色底衬。结果按 host 缓存；内置清单兜底。 */
+   * 给圆标换深色底衬。检测在显示时进行（img 已加载好，blob/本地 URL 同源可读 canvas），
+   * 无论图标来自首次探测还是 IndexedDB 缓存都会被检测到。
+   * 缓存 key 带 v2：v0.4.6 CORS 报错时代曾把大量白色图标误记为"非白"并永久缓存，
+   * 换 key 让全部 host 重新检测一次（纯本地操作，零成本）。内置清单兜底。 */
   var WHITE_HOSTS = ['tongyi.aliyun.com', 'tongyi.com', 'www.tongyi.com', 'qwen.com',
-    'www.qwen.com', 'chat.qwen.ai', 'qwen.ai'];
+    'www.qwen.com', 'chat.qwen.ai', 'qwen.ai', 'qianwen.com', 'www.qianwen.com'];
   var FAV_WHITE = {};
-  try { FAV_WHITE = JSON.parse(localStorage.getItem('myNavFavWhite') || '{}') || {}; } catch (e) { FAV_WHITE = {}; }
+  try { FAV_WHITE = JSON.parse(localStorage.getItem('myNavFavWhite2') || '{}') || {}; } catch (e) { FAV_WHITE = {}; }
   var FAV_WHITE_TIMER = null;
   function favWhiteSave() {
     clearTimeout(FAV_WHITE_TIMER);
     FAV_WHITE_TIMER = setTimeout(function () {
-      try { localStorage.setItem('myNavFavWhite', JSON.stringify(FAV_WHITE)); } catch (e) {}
+      try { localStorage.setItem('myNavFavWhite2', JSON.stringify(FAV_WHITE)); } catch (e) {}
     }, 800);
   }
   function isWhiteHost(host) {
@@ -282,8 +282,14 @@
           if (!span.isConnected) return;
           span.textContent = '';
           span.appendChild(img);
-          // 白色检测结果在探测阶段已写入 FAV_WHITE，此处直接应用
-          if (FAV_WHITE[h] === 1) span.classList.add('fav-white');
+          if (FAV_WHITE[h] === 1) { span.classList.add('fav-white'); return; }
+          if (FAV_WHITE[h] === undefined) {
+            // 显示时直接分析已加载的 img：覆盖首次探测 / IDB 缓存 / 本地 _favicon 全部来源
+            var w = analyzeWhite(img);
+            FAV_WHITE[h] = w ? 1 : 0;
+            favWhiteSave();
+            if (w) span.classList.add('fav-white');
+          }
         };
         img.src = src;
       });
