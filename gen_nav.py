@@ -1,0 +1,626 @@
+# -*- coding: utf-8 -*-
+"""生成个人网址导航站（苹果简约风，单文件 HTML）
+复用 classify_bookmarks.py 的解析/清理/去重/分类逻辑。
+"""
+import os, re, html, json, collections
+from urllib.parse import urlparse
+
+VERSION = "v0.1"
+GEN_DATE = "2026-08-21"
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# ---------- 复用分类脚本核心逻辑（截断到输出统计之前） ----------
+src = open(os.path.join(HERE, "classify_bookmarks.py"), encoding="utf-8").read()
+cut = src.index("# ---------- 输出统计 ----------")
+ns = {}
+exec(compile(src[:cut], "classify_bookmarks.py", "exec"), ns)
+bookmarks = ns["bookmarks"]
+classify = ns["classify"]
+
+result = collections.defaultdict(lambda: collections.defaultdict(list))
+for b in bookmarks:
+    c = classify(b)
+    result[c[0]][c[1]].append(b)
+
+TOP_ORDER = ["AI 工具", "电子硬件", "金融与投资", "NAS 与服务器", "开发与编程",
+             "学习资源", "日常娱乐", "工具与实用", "生活与工作", "私密"]
+
+# 分类主题色
+CAT_THEME = {
+    "AI 工具":        {"accent": "#6366f1", "soft": "#eef2ff"},
+    "电子硬件":       {"accent": "#0d9488", "soft": "#f0fdfa"},
+    "金融与投资":     {"accent": "#e11d48", "soft": "#fff1f2"},
+    "NAS 与服务器":   {"accent": "#7c3aed", "soft": "#f5f3ff"},
+    "开发与编程":     {"accent": "#2563eb", "soft": "#eff6ff"},
+    "学习资源":       {"accent": "#16a34a", "soft": "#f0fdf4"},
+    "日常娱乐":       {"accent": "#ea580c", "soft": "#fff7ed"},
+    "工具与实用":     {"accent": "#0891b2", "soft": "#ecfeff"},
+    "生活与工作":     {"accent": "#4f46e5", "soft": "#eef2ff"},
+    "私密":           {"accent": "#64748b", "soft": "#f1f5f9"},
+}
+
+# 快捷入口：URL 子串 -> 显示名（从书签中真实查找）
+QUICK = [
+    ("claude.ai", "Claude"), ("chat.openai.com", "ChatGPT"), ("gemini.google.com", "Gemini"),
+    ("kimi.moonshot.cn", "Kimi"), ("chat.deepseek.com", "DeepSeek"), ("grok.com", "Grok"),
+    ("github.com", "GitHub"), ("huggingface.co", "Hugging Face"), ("openrouter.ai", "OpenRouter"),
+    ("siliconflow.cn", "硅基流动"), ("modelscope.cn", "魔搭社区"), ("runoob.com", "菜鸟教程"),
+    ("szlcsc", "立创商城"), ("oshwhub", "立创EDA"), ("jellyfin", "Jellyfin"),
+    ("192.168.31.177:5666/v", "飞牛影视"), ("v2raya", "v2rayA"), ("1panel", "1Panel"),
+    ("lichess.org", "Lichess"), ("bejson", "BeJSON"), ("tradingview", "TradingView"),
+    ("z-library", "Z-Library"), ("tool77", "七七工具箱"), ("pan.baidu", "百度网盘"),
+]
+
+def esc(s):
+    return s.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+
+def host_of(url):
+    try:
+        return urlparse(url).netloc.replace("www.", "")
+    except Exception:
+        return url
+
+# ---------- 网站品牌色 ----------
+BRAND = {
+    # AI
+    "claude.ai": "#d97757", "openai.com": "#10a37f", "google.com": "#4285f4",
+    "x.ai": "#111114", "moonshot.cn": "#4d4dff", "deepseek.com": "#4d6bfe",
+    "huggingface.co": "#e8b30c", "modelscope.cn": "#7b3fe4", "openrouter.ai": "#4f46e5",
+    "siliconflow.cn": "#3b82f6", "poe.com": "#5e5ce6", "perplexity.ai": "#20808d",
+    # 开发
+    "github.com": "#24292f", "gitee.com": "#c71d23", "csdn.net": "#fc5531",
+    "cnblogs.com": "#2a6dd4", "segmentfault.com": "#00965e", "zhihu.com": "#0084ff",
+    "juejin.cn": "#1e80ff", "runoob.com": "#4caf50", "hellogithub.com": "#30bf6b",
+    "stackoverflow.com": "#f48024", "lichess.org": "#161512",
+    # 硬件
+    "szlcsc.com": "#ff6a00", "jlc.com": "#ff6a00", "oshwhub.com": "#00b42a",
+    "elecfans.com": "#d7192c", "microchip.com": "#cc0000", "wch.cn": "#e60012",
+    "gd32mcu.com": "#0059b3", "waveshare.net": "#d92d20", "semiee.com": "#f59e0b",
+    "eda365.com": "#e34d3c", "51hei.com": "#ef4444", "ti.com": "#cc0000",
+    "monolithicpower.cn": "#c8102e", "makerworld.com.cn": "#00ae42",
+    # 金融
+    "binance.com": "#f0b90b", "coinmarketcap.com": "#3f6cff", "coingecko.com": "#8dc63f",
+    "okx.com": "#787e87", "dexscreener.com": "#3b82f6", "opensea.io": "#2081e2",
+    "pump.fun": "#8bc34a", "gmgn.ai": "#10b981", "etherscan.io": "#21325b",
+    "bscscan.com": "#21325b", "solscan.io": "#06b6d4", "basescan.org": "#21325b",
+    "tushare.pro": "#3a6ff2", "tradingview.com": "#2962ff", "crypto.com": "#2f6fed",
+    # NAS / 工具 / 服务
+    "fnnas.com": "#3b6ff5", "tencent.com": "#0052d9", "feishu.cn": "#3370ff",
+    "qq.com": "#12b7f5", "mp.weixin.qq.com": "#07c160", "baidu.com": "#2932e1",
+    "bejson.com": "#f5a623", "360doc.com": "#3366cc", "reddit.com": "#ff4500",
+    "smzdm.com": "#e02424", "artstation.com": "#13aff0", "cctv.com": "#d81e06",
+    # 娱乐
+    "bilibili.com": "#fb7299", "youtube.com": "#ff0033", "douyin.com": "#161823",
+    "netflix.com": "#e50914", "spotify.com": "#1db954", "lichess.org": "#161512",
+    # 私密
+    "javdb.com": "#d6246e", "javbus.com": "#7c3aed", "missav.ai": "#ec4899",
+    "pornhub.com": "#ff9000", "jable.tv": "#db2777",
+}
+
+def brand_color(host):
+    """域名 -> 品牌色；未收录的域名用哈希生成稳定色"""
+    h = (host or "").lower().strip()
+    parts = h.split(":")[0].split(".")
+    # 先精确匹配，再逐级去掉子域匹配（blog.csdn.net -> csdn.net）
+    for i in range(len(parts)):
+        suffix = ".".join(parts[i:])
+        if suffix in BRAND:
+            return BRAND[suffix]
+    import hashlib
+    hue = int(hashlib.md5(h.encode()).hexdigest(), 16) % 360
+    return f"hsl({hue},62%,47%)"
+
+# 内网地址不加载 favicon
+def is_local(host):
+    import re as _re
+    return bool(_re.match(r"^\d+\.\d+\.\d+\.\d+", host)) or "localhost" in host
+
+def favicon_img(host, cls=""):
+    """生成 favicon <img>，失败回退 duckduckgo，再失败隐藏（露出字母圆标）"""
+    if not host or is_local(host):
+        return ""
+    h = esc(host.split(":")[0])
+    return (f'<img class="favi{cls}" src="https://favicon.im/{h}?larger=true" loading="lazy" alt="" '
+            f'referrerpolicy="no-referrer" '
+            f'onerror="if(this.dataset.f){{this.style.display=\'none\'}}else{{this.dataset.f=1;'
+            f'this.src=\'https://icons.duckduckgo.com/ip3/{h}.ico\'}}">')
+
+def short_title(b):
+    t = b["title"]
+    if len(t) > 46:
+        t = t[:45].rstrip() + "…"
+    return t
+
+# ---------- 快捷入口 ----------
+quick_items = []
+for sub, name in QUICK:
+    for b in bookmarks:
+        if sub in b["url"]:
+            h = host_of(b["url"])
+            quick_items.append((b["url"], name, h, brand_color(h)))
+            break
+
+# ---------- 统计 ----------
+total = len(bookmarks)
+cat_count = {t: sum(len(v) for v in result[t].values()) for t in TOP_ORDER if t in result}
+quick_json = json.dumps(quick_items, ensure_ascii=False)
+total_str = str(total)
+
+# ---------- 组装 HTML ----------
+parts = []
+parts.append('''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Nav · 我的导航站</title>
+<style>
+:root{
+  --bg:#f5f5f7; --card:#ffffff; --text:#1d1d1f; --muted:#86868b;
+  --border:rgba(0,0,0,.06); --shadow:0 1px 3px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.05);
+  --accent:#0071e3; --radius:18px;
+}
+[data-theme="dark"]{
+  --bg:#0b0b0f; --card:#1c1c22; --text:#f5f5f7; --muted:#86868b;
+  --border:rgba(255,255,255,.08); --shadow:0 1px 3px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  --accent:#2997ff;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;
+  background:var(--bg); color:var(--text);
+  -webkit-font-smoothing:antialiased; transition:background .3s,color .3s;
+}
+a{color:inherit;text-decoration:none}
+
+/* ---------- 顶栏 ---------- */
+.topbar{
+  position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:16px;
+  padding:14px 28px;background:color-mix(in srgb,var(--bg) 82%,transparent);
+  backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--border);
+}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.2px;flex-shrink:0}
+.brand .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#2997ff,#0071e3);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800}
+.search{flex:1;max-width:520px;margin:0 auto;position:relative}
+.search input{
+  width:100%;padding:9px 40px 9px 38px;border-radius:12px;border:1px solid var(--border);
+  background:var(--card);color:var(--text);font-size:14px;outline:none;transition:box-shadow .2s;
+}
+.search input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+.search .sicon{position:absolute;left:13px;top:50%;transform:translateY(-50%);opacity:.45}
+.search kbd{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted);
+  border:1px solid var(--border);border-radius:6px;padding:1px 6px;background:var(--bg);font-family:inherit;
+}
+#themeBtn{
+  border:1px solid var(--border);background:var(--card);color:var(--text);width:34px;height:34px;
+  border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:transform .15s;
+}
+#themeBtn:hover{transform:scale(1.06)}
+#themeBtn svg{width:16px;height:16px}
+
+/* ---------- Hero ---------- */
+.hero{padding:52px 28px 10px;text-align:center}
+.hero h1{font-size:38px;font-weight:800;letter-spacing:-1px}
+.hero p{margin-top:10px;color:var(--muted);font-size:15px}
+.hero .stat{display:inline-flex;gap:6px;align-items:center;margin-top:14px;font-size:13px;color:var(--muted)}
+.hero .stat b{color:var(--accent);font-weight:700}
+
+/* ---------- 快捷入口 ---------- */
+.quick-wrap{padding:26px 28px 4px;max-width:1400px;margin:0 auto}
+.quick-label{font-size:13px;color:var(--muted);margin-bottom:12px;letter-spacing:.5px}
+.quick{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.q{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);
+  border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);
+  transition:transform .15s,box-shadow .15s;min-width:0;
+}
+.q:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--brand,#0071e3) 45%,transparent);
+  box-shadow:0 4px 14px color-mix(in srgb,var(--brand,#0071e3) 20%,transparent)}
+.q .fav{flex-shrink:0}
+.q .n{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- 圆标 ---------- */
+.fav{
+  position:relative;width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:800;color:#fff;flex-shrink:0;letter-spacing:0;
+  background:linear-gradient(135deg,var(--brand,#2997ff),color-mix(in srgb,var(--brand,#2997ff) 76%,#000));
+}
+.fav .favi{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;
+  background:#fff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);
+}
+
+/* ---------- 布局：侧边栏 + 主内容 ---------- */
+.layout{max-width:1400px;margin:0 auto;padding:20px 28px 40px;display:flex;gap:34px;align-items:flex-start}
+.sidebar{
+  width:196px;flex-shrink:0;position:sticky;top:78px;max-height:calc(100vh - 98px);
+  overflow-y:auto;padding:4px 0;scrollbar-width:none;
+}
+.sidebar::-webkit-scrollbar{display:none}
+.side-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1.2px;margin:4px 12px 9px}
+.side-group{margin:1px 0}
+.side-item{
+  display:flex;align-items:center;gap:9px;padding:7px 12px;border-radius:10px;cursor:pointer;
+  font-size:13.5px;font-weight:600;color:var(--muted);transition:background .15s,color .15s,box-shadow .15s;
+}
+.side-item:hover{background:var(--card);color:var(--text)}
+.side-item.active{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+.side-item .dot{width:8px;height:8px;border-radius:3px;flex-shrink:0}
+.side-item .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-item .n{margin-left:auto;font-size:11px;color:var(--muted);font-weight:500;flex-shrink:0}
+.side-item.active .n{color:var(--accent)}
+.side-item .chev{flex-shrink:0;opacity:.45;transition:transform .2s;display:flex;margin-left:1px}
+.side-group.open .chev{transform:rotate(90deg)}
+.side-subs{display:none;padding:2px 0 5px 15px}
+.side-group.open .side-subs{display:block}
+.side-sub{
+  display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:8px;cursor:pointer;
+  font-size:12.5px;font-weight:500;color:var(--muted);transition:background .15s,color .15s;
+}
+.side-sub::before{content:'';width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.5;flex-shrink:0}
+.side-sub:hover{background:var(--card);color:var(--text)}
+.side-sub.active{background:var(--card);color:var(--text)}
+.side-sub .snm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-sub .sn{margin-left:auto;font-size:10.5px;color:var(--muted);flex-shrink:0}
+
+/* ---------- 窄屏：横滑标签条 ---------- */
+.chips{
+  display:none;position:sticky;top:61px;z-index:40;gap:8px;overflow-x:auto;
+  padding:10px 16px 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+  background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:saturate(180%) blur(20px);
+}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  display:flex;align-items:center;gap:6px;padding:6px 13px;background:var(--card);
+  border:1px solid var(--border);border-radius:99px;font-size:12.5px;font-weight:600;
+  color:var(--muted);white-space:nowrap;cursor:pointer;box-shadow:var(--shadow);flex-shrink:0;
+  transition:color .15s,border-color .15s;
+}
+.chip .cdot{width:7px;height:7px;border-radius:50%}
+.chip.active{color:var(--text);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+@media (max-width:1100px){
+  .sidebar{display:none}
+  .chips{display:flex}
+}
+
+/* ---------- 分类区块 ---------- */
+main{flex:1;min-width:0;padding:0}
+.cat{margin-bottom:26px}
+.cat-head{
+  display:flex;align-items:center;gap:11px;cursor:pointer;user-select:none;
+  padding:10px 4px;border-radius:12px;transition:background .15s;
+}
+.cat-head:hover{background:var(--card)}
+.cat-head .dot{width:10px;height:10px;border-radius:3.5px;flex-shrink:0}
+.cat-head .t{font-size:19px;font-weight:700;letter-spacing:-.3px}
+.cat-head .count{
+  font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--border);
+  padding:1px 9px;border-radius:99px;font-weight:600;
+}
+.cat-head .arrow{margin-left:auto;color:var(--muted);transition:transform .25s;flex-shrink:0}
+.cat.collapsed .arrow{transform:rotate(-90deg)}
+.cat.collapsed .subs{display:none}
+.cat.collapsed .cat-head .count{display:none}
+
+.sub{margin:4px 0 20px}
+.sub-title{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.8px;margin:0 2px 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px}
+.link{
+  display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--card);
+  border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);min-width:0;
+  transition:transform .15s,box-shadow .15s,border-color .15s;
+}
+.link:hover{transform:translateY(-2px);box-shadow:0 6px 18px color-mix(in srgb,var(--brand,#0071e3) 22%,transparent);
+  border-color:color-mix(in srgb,var(--brand,#0071e3) 55%,transparent)}
+.link .fav{width:32px;height:32px;border-radius:10px;font-size:14px}
+.link .info{min-width:0;flex:1}
+.link .t{font-size:13.5px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all}
+.link .d{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- 私密分类 ---------- */
+.cat[data-private="1"] .subs{filter:blur(7px);pointer-events:none;transition:filter .3s}
+.cat[data-private="1"].unlocked .subs{filter:none;pointer-events:auto}
+.cat[data-private="1"].collapsed .subs{filter:none}
+.lock-hint{display:none}
+.cat[data-private="1"].collapsed .lock-hint{display:inline-flex}
+
+/* ---------- 空状态 ---------- */
+#empty{display:none;text-align:center;padding:60px 0;color:var(--muted)}
+#empty.show{display:block}
+
+/* ---------- footer ---------- */
+footer{
+  text-align:center;color:var(--muted);font-size:12.5px;padding:26px 0 40px;
+  border-top:1px solid var(--border);margin-top:10px;
+}
+footer b{color:var(--text)}
+
+.hide{display:none!important}
+
+@media (max-width:640px){
+  .hero h1{font-size:30px}
+  .hero{padding:38px 16px 6px}
+  .layout{padding:14px 16px 32px;gap:0}
+  .quick-wrap{padding:20px 16px 4px}
+  .topbar{padding:12px 16px}
+  .search kbd{display:none}
+  .chips{top:57px}
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand"><span class="logo">N</span><span>My Nav</span></div>
+  <div class="search">
+    <svg class="sicon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input id="q" type="text" placeholder="搜索全部书签…（名称 / 域名）" autocomplete="off">
+    <kbd>⌘K</kbd>
+  </div>
+  <button id="themeBtn" title="切换深色/浅色">
+    <svg id="iconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+    <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+  </button>
+</div>
+
+<div class="hero">
+  <h1>我的导航站</h1>
+  <p>把散落的书签，变成自己的网络入口。</p>
+  <div class="stat"><span>共</span><b id="statTotal">0</b><span>个站点 · %CATS% 个分类 · 生成于 2026-08-21</span></div>
+</div>
+
+<div class="quick-wrap">
+  <div class="quick-label">快捷入口</div>
+  <div class="quick" id="quick"></div>
+</div>
+
+<div class="chips" id="chips"></div>
+
+<div class="layout">
+<aside class="sidebar" id="sidebar"><div class="side-label">分类导航</div></aside>
+<main id="cats">
+<div id="empty">没有找到匹配的书签</div>
+''')
+
+# 每类渲染
+for top in TOP_ORDER:
+    if top not in result:
+        continue
+    theme = CAT_THEME[top]
+    accent = theme["accent"]
+    n = cat_count[top]
+    private = ' data-private="1"' if top == "私密" else ""
+    collapsed = ' collapsed' if top == "私密" else ""
+    parts.append(
+        f'<section class="cat{collapsed}"{private} data-cat="{esc(top)}" style="--cat:{accent}">\n'
+        f'  <div class="cat-head">\n'
+        f'    <span class="dot" style="background:{accent}"></span>\n'
+        f'    <span class="t">{esc(top)}</span>\n'
+        f'    <span class="count">{n}</span>\n'
+        f'    <span class="lock-hint" style="font-size:12px;color:var(--muted)">🔒 已锁定，点击展开</span>\n'
+        f'    <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>\n'
+        f'  </div>\n  <div class="subs">\n')
+    for sub, items in result[top].items():
+        parts.append(f'    <div class="sub" data-sub="{esc(sub)}">\n      <div class="sub-title">{esc(sub)}</div>\n      <div class="grid">\n')
+        for b in items:
+            host = host_of(b["url"])
+            letter = (b["title"].strip() or host)[0].upper()
+            color = brand_color(host)
+            parts.append(
+                f'        <a class="link" href="{esc(b["url"])}" target="_blank" rel="noopener" '
+                f'data-w="{esc((b["title"] + " " + b["url"] + " " + host).lower())}" '
+                f'style="--brand:{color}">\n'
+                f'          <span class="fav">{esc(letter)}{favicon_img(host)}</span>\n'
+                f'          <span class="info"><span class="t">{esc(short_title(b))}</span><span class="d">{esc(host)}</span></span>\n'
+                f'        </a>\n')
+        parts.append('      </div>\n    </div>\n')
+    parts.append('  </div>\n</section>\n')
+
+parts.append('''</main>
+</div>
+
+<footer>
+  <b>%TOTAL%</b> 个站点 · <b>My Nav %VERSION%</b> · 生成于 <b>%GEN_DATE%</b> · ⌘K 快速搜索
+</footer>
+
+<script>
+// ---------- 快捷入口 ----------
+const QUICK = __QUICK_JSON__;
+const qWrap = document.getElementById('quick');
+function favImg(host){
+  if(!host || /^\\d+\\.\\d+\\.\\d+\\.\\d+/.test(host) || host.indexOf('localhost') !== -1) return '';
+  const d = host.split(':')[0];
+  return '<img class="favi" src="https://favicon.im/' + d + '?larger=true" loading="lazy" alt="" referrerpolicy="no-referrer" '
+    + "onerror=\\"if(this.dataset.f){this.style.display='none'}else{this.dataset.f=1;this.src='https://icons.duckduckgo.com/ip3/" + d + ".ico'}\\">";
+}
+qWrap.innerHTML = QUICK.map(function(it){
+  const url = it[0], name = it[1], host = it[2], color = it[3] || '#0071e3';
+  const h = (host || '').charAt(0).toUpperCase() || name.charAt(0);
+  return '<a class="q" href="' + url + '" target="_blank" rel="noopener" title="' + name + ' · ' + host + '" style="--brand:' + color + '">'
+    + '<span class="fav">' + h + favImg(host) + '</span>'
+    + '<span class="n">' + name + '</span></a>';
+}).join('');
+
+// ---------- 侧边栏 / 分类快速导航（含二级子分类） ----------
+const catEls = document.querySelectorAll('.cat');
+const sb = document.getElementById('sidebar');
+const chipsWrap = document.getElementById('chips');
+const navMap = {};
+function scrollToEl(el){
+  window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - 70, behavior: 'smooth' });
+}
+catEls.forEach(function(cat){
+  const name = cat.dataset.cat;
+  const color = (cat.style.getPropertyValue('--cat') || '').trim() || '#0071e3';
+  const priv = cat.dataset.private === '1';
+  const n = cat.querySelectorAll('.link').length;
+
+  const group = document.createElement('div');
+  group.className = 'side-group';
+
+  const item = document.createElement('div');
+  item.className = 'side-item';
+  const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = color;
+  const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = priv ? '🔒 ' + name : name;
+  item.appendChild(dot); item.appendChild(nm);
+  const hasSubs = !priv && cat.querySelectorAll('.sub').length > 0;
+  if(hasSubs){
+    const chev = document.createElement('span'); chev.className = 'chev';
+    chev.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+    item.appendChild(chev);
+  }
+  const cnt = document.createElement('span'); cnt.className = 'n'; cnt.textContent = n;
+  item.appendChild(cnt);
+  item.addEventListener('click', function(){
+    const wasOpen = group.classList.contains('open');
+    document.querySelectorAll('.side-group.open').forEach(function(g){ g.classList.remove('open'); });
+    if(!wasOpen) group.classList.add('open');
+    scrollToEl(cat);
+  });
+  group.appendChild(item);
+
+  if(hasSubs){
+    const subsWrap = document.createElement('div');
+    subsWrap.className = 'side-subs';
+    cat.querySelectorAll('.sub').forEach(function(subEl){
+      const si = document.createElement('div');
+      si.className = 'side-sub';
+      const snm = document.createElement('span'); snm.className = 'snm'; snm.textContent = subEl.dataset.sub;
+      const sn = document.createElement('span'); sn.className = 'sn'; sn.textContent = subEl.querySelectorAll('.link').length;
+      si.appendChild(snm); si.appendChild(sn);
+      subEl._nav = si;
+      si.addEventListener('click', function(e){ e.stopPropagation(); scrollToEl(subEl); });
+      subsWrap.appendChild(si);
+    });
+    group.appendChild(subsWrap);
+  }
+  sb.appendChild(group);
+
+  const chip = document.createElement('div');
+  chip.className = 'chip';
+  const cdot = document.createElement('span'); cdot.className = 'cdot'; cdot.style.background = color;
+  chip.appendChild(cdot);
+  chip.appendChild(document.createTextNode(priv ? '🔒 ' + name : name));
+  chip.addEventListener('click', function(){ scrollToEl(cat); });
+  chipsWrap.appendChild(chip);
+
+  navMap[name] = [group, chip];
+});
+
+// 滚动高亮：当前分类（手风琴自动展开）+ 当前子分类
+function clearNavActive(){
+  document.querySelectorAll('.side-item.active, .chip.active').forEach(function(el){ el.classList.remove('active'); });
+}
+const io = new IntersectionObserver(function(entries){
+  entries.forEach(function(en){
+    if(!en.isIntersecting) return;
+    const name = en.target.dataset.cat;
+    clearNavActive();
+    const nv = navMap[name];
+    if(nv){
+      nv[0].querySelector('.side-item').classList.add('active');
+      nv[1].classList.add('active');
+      document.querySelectorAll('.side-group.open').forEach(function(g){ if(g !== nv[0]) g.classList.remove('open'); });
+      nv[0].classList.add('open');
+      // 清掉其他分类下的子分类高亮
+      document.querySelectorAll('.side-sub.active').forEach(function(el){ if(!nv[0].contains(el)) el.classList.remove('active'); });
+      const it = nv[0].querySelector('.side-item');
+      const r = it.getBoundingClientRect(), pr = sb.getBoundingClientRect();
+      if(r.top < pr.top || r.bottom > pr.bottom) it.scrollIntoView({ block: 'nearest' });
+    }
+  });
+}, { rootMargin: '-25% 0px -65% 0px' });
+catEls.forEach(function(cat){ io.observe(cat); });
+const ioSub = new IntersectionObserver(function(entries){
+  entries.forEach(function(en){
+    if(!en.isIntersecting || !en.target._nav) return;
+    document.querySelectorAll('.side-sub.active').forEach(function(el){ el.classList.remove('active'); });
+    en.target._nav.classList.add('active');
+  });
+}, { rootMargin: '-25% 0px -65% 0px' });
+document.querySelectorAll('.sub').forEach(function(s){ ioSub.observe(s); });
+
+// ---------- 搜索 ----------
+const q = document.getElementById('q');
+const empty = document.getElementById('empty');
+function doSearch(){
+  const s = q.value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('.link').forEach(function(a){
+    const hit = !s || a.dataset.w.indexOf(s) !== -1;
+    a.classList.toggle('hide', !hit);
+    if(hit) shown++;
+  });
+  document.querySelectorAll('.sub').forEach(function(sub){
+    const any = Array.prototype.some.call(sub.querySelectorAll('.link'), function(a){ return !a.classList.contains('hide'); });
+    sub.classList.toggle('hide', !any);
+  });
+  document.querySelectorAll('.cat').forEach(function(cat){
+    const any = Array.prototype.some.call(cat.querySelectorAll('.sub'), function(s){ return !s.classList.contains('hide'); });
+    cat.classList.toggle('hide', !any);
+    const nv = navMap[cat.dataset.cat];
+    if(nv) nv.forEach(function(el){ el.classList.toggle('hide', !any); });
+  });
+  empty.classList.toggle('show', s && shown === 0);
+}
+q.addEventListener('input', doSearch);
+document.addEventListener('keydown', function(e){
+  if((e.metaKey || e.ctrlKey) && e.key === 'k'){ e.preventDefault(); q.focus(); }
+  if(e.key === 'Escape'){ q.value = ''; doSearch(); q.blur(); }
+});
+
+// ---------- 折叠 ----------
+document.querySelectorAll('.cat-head').forEach(function(h){
+  h.addEventListener('click', function(){
+    const cat = h.parentElement;
+    if(cat.dataset.private === '1' && cat.classList.contains('collapsed')){
+      cat.classList.remove('collapsed');
+      cat.classList.add('unlocked');
+    } else if(cat.dataset.private === '1' && cat.classList.contains('unlocked')){
+      cat.classList.add('collapsed');
+      cat.classList.remove('unlocked');
+    } else {
+      cat.classList.toggle('collapsed');
+    }
+  });
+});
+
+// ---------- 主题 ----------
+const root = document.documentElement;
+const btn = document.getElementById('themeBtn');
+const moon = document.getElementById('iconMoon'), sun = document.getElementById('iconSun');
+function setTheme(d){
+  root.setAttribute('data-theme', d);
+  moon.style.display = (d === 'dark') ? 'none' : '';
+  sun.style.display = (d === 'dark') ? '' : 'none';
+  try{ localStorage.setItem('nav-theme', d); }catch(e){}
+}
+btn.addEventListener('click', function(){
+  setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+try{
+  const saved = localStorage.getItem('nav-theme');
+  setTheme(saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+}catch(e){ setTheme('light'); }
+
+// 统计数
+document.getElementById('statTotal').textContent = '__TOTAL__';
+</script>
+</body>
+</html>
+''')
+
+OUT = os.path.join(HERE, "index.html")
+html_doc = "".join(parts)
+html_doc = html_doc.replace("__QUICK_JSON__", quick_json)
+html_doc = html_doc.replace("__TOTAL__", total_str)
+html_doc = html_doc.replace("%TOTAL%", total_str)
+html_doc = html_doc.replace("%VERSION%", VERSION)
+html_doc = html_doc.replace("%GEN_DATE%", GEN_DATE)
+html_doc = html_doc.replace("%CATS%", str(len(cat_count)))
+with open(OUT, "w", encoding="utf-8") as f:
+    f.write(html_doc)
+print(f"已生成: {OUT} ({os.path.getsize(OUT)/1024:.1f} KB, {total} 个站点, {len(quick_items)} 个快捷入口)")
