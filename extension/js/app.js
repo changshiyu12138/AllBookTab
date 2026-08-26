@@ -21,6 +21,10 @@
   var observer = null;
   var OVERRIDES = {};    // 用户拖拽指定的分类 {id: [cat, sub]}
   var DRAG_ID = null;    // 正在拖拽的书签 id
+  var MOVE_ID = null;    // 「移动到分类」面板当前操作的书签 id
+
+  // 触屏检测：hover 不可用 → 按钮常显、用面板替代拖拽
+  var IS_TOUCH = !!(window.matchMedia && matchMedia('(hover: none)').matches) || 'ontouchstart' in window;
 
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) {
@@ -340,6 +344,61 @@
     assignOverride(id, cat, sub);
   }
 
+  // ============ 移动到分类（触屏替代拖拽） ============
+  function openMovePanel(id) {
+    MOVE_ID = id;
+    var b = null;
+    for (var i = 0; i < ALL.length; i++) if (ALL[i].id === id) { b = ALL[i]; break; }
+    $('mMoveDesc').textContent = b ? '将「' + b.title.slice(0, 18) + '」移动到：' : '';
+    // 用分类统计构建选择列表（含子分类）
+    var byCat = {};
+    ALL.forEach(function (x) { (byCat[x.cat] = byCat[x.cat] || {})[x.sub] = (byCat[x.cat][x.sub] || 0) + 1; });
+    var inOrder = {};
+    C.CAT_ORDER.forEach(function (co) { inOrder[co[0]] = 1; });
+    var cats = [];
+    C.CAT_ORDER.forEach(function (co) { if (byCat[co[0]]) cats.push(co[0]); });
+    Object.keys(byCat).filter(function (c) { return !inOrder[c]; })
+      .sort(function (a, b) {
+        var na = 0, nb = 0;
+        Object.keys(byCat[a]).forEach(function (s) { na += byCat[a][s]; });
+        Object.keys(byCat[b]).forEach(function (s) { nb += byCat[b][s]; });
+        return nb - na;
+      })
+      .forEach(function (c) { cats.push(c); });
+    var html = '';
+    cats.forEach(function (cat) {
+      var subs = Object.keys(byCat[cat]).sort(function (a, b) { return byCat[cat][b] - byCat[cat][a]; });
+      html += '<div class="mv-group">' +
+        '<div class="mv-item" data-cat="' + esc(cat) + '"><span class="dot" style="background:' + themeColor(cat) + '"></span><span class="nm">' + esc(cat) + '</span><span class="n">' + (subs.length ? '整个分类' : byCat[cat][subs[0]]) + '</span></div>';
+      if (subs.length > 1) {
+        subs.forEach(function (sub) {
+          html += '<div class="mv-sub" data-cat="' + esc(cat) + '" data-sub="' + esc(sub) + '"><span class="snm">' + esc(sub) + '</span><span class="sn">' + byCat[cat][sub] + '</span></div>';
+        });
+      }
+      html += '</div>';
+    });
+    html += '<div class="mv-new" id="mvNew"><span class="plus">＋</span>新建分类<small>分类/子分类</small></div>';
+    $('mMoveList').innerHTML = html;
+    // 分类/子分类点击
+    $('mMoveList').querySelectorAll('.mv-item, .mv-sub').forEach(function (it) {
+      it.onclick = function () {
+        assignOverride(MOVE_ID, it.dataset.cat, it.dataset.sub || '未分类');
+        closeMovePanel();
+      };
+    });
+    // 新建分类
+    $('mvNew').onclick = function () {
+      var id = MOVE_ID;
+      closeMovePanel();
+      promptNewCat(id);
+    };
+    $('moveMask').classList.add('show');
+  }
+  function closeMovePanel() {
+    MOVE_ID = null;
+    $('moveMask').classList.remove('show');
+  }
+
   // 自定义分类的主题色（内置没有的颜色按名字哈希取色）
   var CUSTOM_PALETTE = ['#7c3aed', '#0ea5e9', '#f97316', '#e11d48', '#16a34a', '#0891b2', '#db2777', '#8b5cf6', '#d97706'];
   function themeColor(cat) {
@@ -364,7 +423,7 @@
     $('qCount').textContent = quick.length + '/' + QUICK_MAX;
     var el = $('quick');
     if (!quick.length) {
-      el.innerHTML = '<div class="quick-empty">还没有快捷入口 —— 悬停任意书签卡片点 ☆ 即可添加（最多 ' + QUICK_MAX + ' 个）</div>';
+      el.innerHTML = '<div class="quick-empty">' + (IS_TOUCH ? '还没有快捷入口 —— 点书签卡片右上角 ☆ 即可添加（最多 ' : '还没有快捷入口 —— 悬停任意书签卡片点 ☆ 即可添加（最多 ') + QUICK_MAX + ' 个）</div>';
       return;
     }
     el.innerHTML = quick.map(function (q, i) {
@@ -499,8 +558,9 @@
   function cardHtml(b) {
     var brand = C.brandColor(b.host);
     var on = isQuick(b.url);
-    return '<a class="link" draggable="true" data-bid="' + esc(b.id) + '" href="' + esc(b.url) + '" target="_blank" rel="noopener" style="--brand:' + brand + '" data-tags="' + esc(b.tags.join(',')) + '" title="按住可拖拽到左侧侧边栏调整分类">' +
+    return '<a class="link" draggable="true" data-bid="' + esc(b.id) + '" href="' + esc(b.url) + '" target="_blank" rel="noopener" style="--brand:' + brand + '" data-tags="' + esc(b.tags.join(',')) + '" title="' + (IS_TOUCH ? '点击 ⋯ 可调整分类' : '按住可拖拽到左侧侧边栏调整分类') + '">' +
       '<button class="qadd' + (on ? ' on' : '') + '" data-url="' + esc(b.url) + '" data-title="' + esc(b.title) + '" title="' + (on ? '从快捷入口移除' : '加入快捷入口') + '">' + (on ? '★' : '☆') + '</button>' +
+      (IS_TOUCH ? '<button class="mvbtn" data-bid="' + esc(b.id) + '" data-title="' + esc(b.title) + '" title="移动到分类">⋯</button>' : '') +
       favHtml(b.host, b.url, brand) +
       '<span class="info"><span class="t">' + esc(b.title) + '</span><span class="d">' + esc(b.host) + '</span></span>' +
       (b.custom ? '<button class="reauto" data-bid="' + esc(b.id) + '" title="这个分类是我手动指定的，点击恢复自动分类">↺</button>' : '') +
@@ -576,23 +636,33 @@
         cat.classList.toggle('collapsed');
       };
     });
-    // 拖拽：卡片为拖拽源
-    document.querySelectorAll('.link[draggable]').forEach(function (a) {
-      a.addEventListener('dragstart', function (e) {
-        DRAG_ID = a.dataset.bid;
-        try {
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/plain', 'my-nav:' + a.dataset.bid);
-        } catch (err) {}
-        document.body.classList.add('dragging');
-        a.classList.add('drag-src');
+    // 拖拽：卡片为拖拽源（触屏设备无 HTML5 拖拽，改用「移动到分类」面板）
+    if (!IS_TOUCH) {
+      document.querySelectorAll('.link[draggable]').forEach(function (a) {
+        a.addEventListener('dragstart', function (e) {
+          DRAG_ID = a.dataset.bid;
+          try {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', 'my-nav:' + a.dataset.bid);
+          } catch (err) {}
+          document.body.classList.add('dragging');
+          a.classList.add('drag-src');
+        });
+        a.addEventListener('dragend', function () {
+          DRAG_ID = null;
+          document.body.classList.remove('dragging');
+          a.classList.remove('drag-src');
+          document.querySelectorAll('.drop-hover').forEach(function (el) { el.classList.remove('drop-hover'); });
+        });
       });
-      a.addEventListener('dragend', function () {
-        DRAG_ID = null;
-        document.body.classList.remove('dragging');
-        a.classList.remove('drag-src');
-        document.querySelectorAll('.drop-hover').forEach(function (el) { el.classList.remove('drop-hover'); });
-      });
+    }
+    // 触屏：卡片「⋯」按钮 → 移动到分类面板
+    document.querySelectorAll('.mvbtn').forEach(function (btn) {
+      btn.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openMovePanel(btn.dataset.bid);
+      };
     });
     // 恢复自动分类
     document.querySelectorAll('.reauto').forEach(function (btn) {
@@ -821,6 +891,7 @@
 
   function init() {
     $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
+    if (IS_TOUCH) document.body.classList.add('touch');
 
     // 主题（storage 优先，localStorage 兜底）
     var dark = false;
@@ -858,7 +929,10 @@
     });
     document.addEventListener('keydown', function (e) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('q').focus(); $('q').select(); }
-      if (e.key === 'Escape') { $('modalMask').classList.remove('show'); }
+      if (e.key === 'Escape') {
+        $('modalMask').classList.remove('show');
+        closeMovePanel();
+      }
     });
 
     // 标签操作
@@ -874,6 +948,9 @@
     $('organizeBtn').onclick = openOrganize;
     $('mClose').onclick = function () { $('modalMask').classList.remove('show'); };
     $('modalMask').onclick = function (e) { if (e.target === $('modalMask')) $('modalMask').classList.remove('show'); };
+    // 移动到分类面板
+    $('mMoveClose').onclick = closeMovePanel;
+    $('moveMask').onclick = function (e) { if (e.target === $('moveMask')) closeMovePanel(); };
     $('btnViewDup').onclick = function () { toggleView('dup'); };
     $('btnViewInvalid').onclick = function () { toggleView('invalid'); };
     $('btnDup').onclick = dedupe;

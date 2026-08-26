@@ -27,7 +27,7 @@
 </div>
 
 <div class="quick-wrap">
-  <div class="quick-label">快捷入口 <span class="qcount" id="qCount">0/12</span><span style="font-size:11px">悬停任意书签卡片，点 ☆ 收藏到这里</span></div>
+  <div class="quick-label">快捷入口 <span class="qcount" id="qCount">0/12</span><span style="font-size:11px">点任意书签卡片右上角 ☆ 收藏到这里</span></div>
   <div class="quick" id="quick"></div>
 </div>
 
@@ -92,6 +92,17 @@
       <button class="mbtn" id="btnExport">导出</button>
     </div>
     <div class="mnote">提示：生成整理文件夹可重复执行，每次都会新建带日期的文件夹，旧的不会覆盖；确认满意后可在书签管理器中手动删除旧版。</div>
+  </div>
+</div>
+
+<!-- 移动到分类（触屏设备替代拖拽） -->
+<div id="moveMask">
+  <div class="modal">
+    <button class="mclose" id="mMoveClose">✕</button>
+    <h2>移动到分类</h2>
+    <div class="mdesc" id="mMoveDesc"></div>
+    <div id="mMoveList"></div>
+    <div class="mnote">选择一个分类或子分类，把该书签移动到那里；选择「新建分类」可创建新的分类/子分类（格式：分类/子分类）。</div>
   </div>
 </div>
 
