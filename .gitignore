@@ -9,5 +9,7 @@ classified_preview.txt
 extension/test/
 
 # 打包产物不入库
+allbooktab-v*.zip
+allbooktab-v*/
 my-nav-v*.zip
 my-nav-v*/

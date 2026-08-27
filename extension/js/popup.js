@@ -1,4 +1,4 @@
-/* My Nav · 工具栏弹窗：快速查看书签健康度 */
+/* AllBookTab · 工具栏弹窗：快速查看书签健康度 */
 (function () {
   'use strict';
   var C = window.NavClassifier;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "My Nav · 书签整理与新标签页导航",
-  "version": "0.5.2.11",
+  "name": "AllBookTab · 书签整理与新标签页导航",
+  "version": "0.5.2.12",
   "description": "自动读取浏览器书签并智能整理：分类导航、多标签筛选、快速搜索、重复清理、一键生成整理后的书签文件夹，打造你的专属新标签页。",
   "permissions": ["bookmarks", "storage", "favicon"],
   "host_permissions": ["https://favicon.im/*", "https://*.favicon.im/*", "https://icons.duckduckgo.com/*"],
@@ -10,7 +10,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "My Nav · 书签整理与导航",
+    "default_title": "AllBookTab · 书签整理与导航",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

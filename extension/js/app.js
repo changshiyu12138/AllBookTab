@@ -1,4 +1,4 @@
-/* My Nav · 新标签页主逻辑
+/* AllBookTab · 新标签页主逻辑
  * 数据源：chrome.bookmarks（实时读取本机书签，不上传）
  */
 (function () {
@@ -643,7 +643,7 @@
           DRAG_ID = a.dataset.bid;
           try {
             e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', 'my-nav:' + a.dataset.bid);
+            e.dataTransfer.setData('text/plain', 'allbooktab:' + a.dataset.bid);
           } catch (err) {}
           document.body.classList.add('dragging');
           a.classList.add('drag-src');
@@ -956,7 +956,7 @@
     var root = await findOtherBookmarksRoot();
     var d = new Date();
     var pad = function (x) { return (x < 10 ? '0' : '') + x; };
-    var top = await bmCreate(root, 'My Nav 整理 ' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()));
+    var top = await bmCreate(root, 'AllBookTab 整理 ' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()));
     if (!top) { toast('生成失败'); return; }
     var subCache = {};
     var count = 0;
@@ -967,7 +967,7 @@
       if (!subCache[key]) subCache[key] = await bmCreate(top.id, b.cat + ' / ' + b.sub);
       if (subCache[key]) { await bmCreate(subCache[key].id, b.title, b.url); count++; }
     }
-    toast('已生成「My Nav 整理」文件夹，共复制 ' + count + ' 个书签');
+    toast('已生成「AllBookTab 整理」文件夹，共复制 ' + count + ' 个书签');
   }
   function exportHtml() {
     var rows = {};
@@ -992,7 +992,7 @@
     var blob = new Blob([s], { type: 'text/html' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'my-nav-' + d.getFullYear() + (d.getMonth() + 1 < 10 ? '0' : '') + (d.getMonth() + 1) + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate() + '.html';
+    a.download = 'allbooktab-' + d.getFullYear() + (d.getMonth() + 1 < 10 ? '0' : '') + (d.getMonth() + 1) + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate() + '.html';
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 3000);
     toast('已导出整理后的书签 HTML');
