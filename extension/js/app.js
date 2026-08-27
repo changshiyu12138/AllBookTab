@@ -442,7 +442,7 @@
     });
   }
   function saveQuick() {
-    chrome.storage.local.set({ n: LS_QUICK, v: quick });
+    chrome.storage.local.set({ myNavQuickV1: quick });
     localStorage.setItem(LS_QUICK, JSON.stringify(quick));
   }
   function isQuick(url) {
@@ -977,7 +977,7 @@
     document.documentElement.dataset.theme = dark ? 'dark' : '';
     $('iconMoon').style.display = dark ? 'none' : '';
     $('iconSun').style.display = dark ? '' : 'none';
-    chrome.storage.local.set({ n: LS_THEME, v: dark });
+    chrome.storage.local.set({ myNavThemeV1: dark });
     localStorage.setItem(LS_THEME, dark ? '1' : '');
   }
 
@@ -1009,6 +1009,8 @@
       var ov = JSON.parse(localStorage.getItem(LS_OVERRIDE) || 'null');
       if (ov && typeof ov === 'object') OVERRIDES = ov;
     } catch (e) {}
+    // 清理 v0.5.2.9 及以前误存的垃圾键（当时用 {n, v} 而非真实 key 写入）
+    try { chrome.storage.local.remove(['n', 'v']); } catch (e) {}
     chrome.storage.local.get([LS_THEME, LS_QUICK, 'myNavOverrideV1'], function (cfg) {
       if (cfg && cfg[LS_THEME]) dark = true;
       applyTheme(dark);
