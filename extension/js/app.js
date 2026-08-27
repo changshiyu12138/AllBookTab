@@ -20,8 +20,10 @@
   var kw = '';           // 搜索词
   var observer = null;
   var OVERRIDES = {};    // 用户拖拽指定的分类 {id: [cat, sub]}
+  var FAV_OVERRIDES = {}; // 用户自定义 logo {id: dataURL}
   var DRAG_ID = null;    // 正在拖拽的书签 id
   var MOVE_ID = null;    // 「移动到分类」面板当前操作的书签 id
+  var CTX_ID = null;     // 右键菜单当前操作的书签 id
 
   // 触屏检测：hover 不可用 → 按钮常显、用面板替代拖拽
   var IS_TOUCH = !!(window.matchMedia && matchMedia('(hover: none)').matches) || 'ontouchstart' in window;
@@ -230,9 +232,9 @@
     });
     return p;
   }
-  function favHtml(host, url, brand) {
+  function favHtml(host, url, brand, bid) {
     var letter = (host || '?').replace(/^www\./, '').charAt(0).toUpperCase() || '?';
-    return '<span class="fav' + (isWhiteHost(host) ? ' fav-white' : '') + '" style="--brand:' + brand + '" data-h="' + esc(host || '') + '" data-bu="' + esc(url) + '">' + letter + '</span>';
+    return '<span class="fav' + (isWhiteHost(host) ? ' fav-white' : '') + '" style="--brand:' + brand + '" data-h="' + esc(host || '') + '" data-bu="' + esc(url) + '"' + (bid ? ' data-bid="' + esc(bid) + '"' : '') + '>' + letter + '</span>';
   }
 
   /* ---------- 白色图标检测 ----------
@@ -277,7 +279,20 @@
     (root || document).querySelectorAll('.fav[data-bu]').forEach(function (span) {
       var u = span.getAttribute('data-bu');
       var h = span.getAttribute('data-h');
+      var bid = span.getAttribute('data-bid');
       span.removeAttribute('data-bu');
+      // 自定义 logo 优先（用户上传的图片）
+      if (bid && FAV_OVERRIDES[bid]) {
+        var oimg = new Image();
+        oimg.className = 'favi';
+        oimg.onload = function () {
+          if (!span.isConnected) return;
+          span.textContent = '';
+          span.appendChild(oimg);
+        };
+        oimg.src = FAV_OVERRIDES[bid];
+        return;
+      }
       loadFavUrl(h, u).then(function (src) {
         if (!src || !span.isConnected) return;
         var img = new Image();
@@ -331,6 +346,18 @@
     saveOverrides();
     toast('已将「' + b.title.slice(0, 16) + '」移到 ' + cat + ' / ' + (sub || '未分类'));
     reload();
+  }
+  // ============ 自定义 logo ============
+  function saveFavOverrides() {
+    try { chrome.storage.local.set({ myNavFavOverridesV1: FAV_OVERRIDES }); } catch (e) {}
+  }
+  function setFavOverride(id, dataUrl) {
+    FAV_OVERRIDES[id] = dataUrl;
+    saveFavOverrides();
+  }
+  function clearFavOverride(id) {
+    delete FAV_OVERRIDES[id];
+    saveFavOverrides();
   }
   function promptNewCat(id) {
     var name = prompt('新分类名称（可用「分类/子分类」格式，如：学习资源/竞赛）');
@@ -400,6 +427,123 @@
   function closeMovePanel() {
     MOVE_ID = null;
     $('moveMask').classList.remove('show');
+  }
+
+  // ============ 右键菜单（编辑 / 移动到级联） ============
+  function openCtxMenu(id, x, y) {
+    CTX_ID = id;
+    var b = null;
+    for (var i = 0; i < ALL.length; i++) if (ALL[i].id === id) { b = ALL[i]; break; }
+    // 渲染「移动到」级联子菜单（一级目录 + 二级子分类）
+    var byCat = {};
+    ALL.forEach(function (x) { (byCat[x.cat] = byCat[x.cat] || {})[x.sub] = (byCat[x.cat][x.sub] || 0) + 1; });
+    var inOrder = {};
+    C.CAT_ORDER.forEach(function (co) { inOrder[co[0]] = 1; });
+    var cats = [];
+    C.CAT_ORDER.forEach(function (co) { if (byCat[co[0]]) cats.push(co[0]); });
+    Object.keys(byCat).filter(function (c) { return !inOrder[c]; })
+      .sort(function (a, b) {
+        var na = 0, nb = 0;
+        Object.keys(byCat[a]).forEach(function (s) { na += byCat[a][s]; });
+        Object.keys(byCat[b]).forEach(function (s) { nb += byCat[b][s]; });
+        return nb - na;
+      })
+      .forEach(function (c) { cats.push(c); });
+    var subHtml = '';
+    cats.forEach(function (cat) {
+      var subs = Object.keys(byCat[cat]).sort(function (a, b) { return byCat[cat][b] - byCat[cat][a]; });
+      if (subs.length > 1) {
+        subHtml += '<div class="ctx-cat"><span class="dot" style="background:' + themeColor(cat) + '"></span><span>' + esc(cat) + '</span>' +
+          '<svg class="carrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>' +
+          '<div class="ctx-sub2">' +
+          subs.map(function (sub) {
+            return '<div class="ctx-leaf" data-cat="' + esc(cat) + '" data-sub="' + esc(sub) + '"><span>' + esc(sub) + '</span><span class="cnt">' + byCat[cat][sub] + '</span></div>';
+          }).join('') +
+          '</div></div>';
+      } else {
+        subHtml += '<div class="ctx-leaf" data-cat="' + esc(cat) + '" data-sub="' + esc(subs[0]) + '"><span>' + esc(cat) + '</span><span class="cnt">' + byCat[cat][subs[0]] + '</span></div>';
+      }
+    });
+    $('ctxSub').innerHTML = subHtml;
+    // 绑定移动
+    $('ctxSub').querySelectorAll('.ctx-leaf').forEach(function (it) {
+      it.onclick = function (e) {
+        e.stopPropagation();
+        assignOverride(CTX_ID, it.dataset.cat, it.dataset.sub || '未分类');
+        closeCtxMenu();
+      };
+    });
+    $('ctxSub').querySelectorAll('.ctx-cat').forEach(function (it) {
+      it.onclick = function (e) { e.stopPropagation(); }; // 有二级的一级目录本身不直接移动
+    });
+    // 编辑
+    $('ctxEdit').onclick = function (e) {
+      e.stopPropagation();
+      closeCtxMenu();
+      openEdit(CTX_ID);
+    };
+    // 定位（防溢出）：为右侧级联子菜单预留约 320px 空间
+    var m = $('ctxMenu');
+    m.classList.add('show');
+    var r = m.getBoundingClientRect();
+    var px = Math.min(x, window.innerWidth - Math.max(r.width, 320) - 8);
+    var py = Math.min(y, window.innerHeight - r.height - 8);
+    m.style.left = Math.max(4, px) + 'px';
+    m.style.top = Math.max(4, py) + 'px';
+  }
+  function closeCtxMenu() {
+    CTX_ID = null;
+    $('ctxMenu').classList.remove('show');
+  }
+
+  // ============ 书签编辑面板 ============
+  var EDIT_ID = null;
+  function openEdit(id) {
+    EDIT_ID = id;
+    var b = null;
+    for (var i = 0; i < ALL.length; i++) if (ALL[i].id === id) { b = ALL[i]; break; }
+    if (!b) return;
+    $('eDesc').textContent = '编辑「' + b.title.slice(0, 24) + '」的标题、网址与图标';
+    $('eTitle').value = b.title;
+    $('eUrl').value = b.url;
+    renderEditLogo();
+    $('editMask').classList.add('show');
+  }
+  function closeEdit() {
+    EDIT_ID = null;
+    $('editMask').classList.remove('show');
+  }
+  // 编辑面板 Logo 预览：自定义优先，否则显示当前 favicon
+  function renderEditLogo() {
+    var box = $('eLogoPrev');
+    box.innerHTML = '';
+    if (FAV_OVERRIDES[EDIT_ID]) {
+      var i1 = new Image();
+      i1.onload = function () { box.appendChild(i1); };
+      i1.src = FAV_OVERRIDES[EDIT_ID];
+      return;
+    }
+    var b = null;
+    for (var i = 0; i < ALL.length; i++) if (ALL[i].id === EDIT_ID) { b = ALL[i]; break; }
+    loadFavUrl(b.host, b.url).then(function (src) {
+      if (!src || !box.isConnected) return;
+      var i2 = new Image();
+      i2.onload = function () { box.appendChild(i2); };
+      i2.src = src;
+    });
+    if (!FAV_OVERRIDES[EDIT_ID]) box.innerHTML = '<span class="no">' + (b.host || '?').charAt(0).toUpperCase() + '</span>';
+  }
+  function saveEdit() {
+    var title = $('eTitle').value.trim();
+    var url = $('eUrl').value.trim();
+    if (!title) { toast('标题不能为空'); return; }
+    if (!url) { toast('网址不能为空'); return; }
+    chrome.bookmarks.update(EDIT_ID, { title: title, url: url }, function () {
+      if (chrome.runtime.lastError) { toast('保存失败：' + chrome.runtime.lastError.message); return; }
+      toast('已保存书签');
+      closeEdit();
+      reload();
+    });
   }
 
   // 自定义分类的主题色（内置没有的颜色按名字哈希取色）
@@ -564,7 +708,7 @@
       '<button class="qadd' + (on ? ' on' : '') + '" data-url="' + esc(b.url) + '" data-title="' + esc(b.title) + '" title="' + (on ? '从快捷入口移除' : '加入快捷入口') + '">' + (on ? '★' : '☆') + '</button>' +
       (IS_TOUCH ? '<button class="mvbtn" data-bid="' + esc(b.id) + '" data-title="' + esc(b.title) + '" title="移动到分类">⋯</button>' : '') +
       '<button class="delbtn" data-bid="' + esc(b.id) + '" title="删除书签"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6"/></svg></button>' +
-      favHtml(b.host, b.url, brand) +
+      favHtml(b.host, b.url, brand, b.id) +
       '<span class="info"><span class="t-wrap"><span class="t">' + esc(b.title) + '</span></span><span class="d">' + esc(b.host) + '</span></span>' +
       (b.custom ? '<button class="reauto" data-bid="' + esc(b.id) + '" title="这个分类是我手动指定的，点击恢复自动分类">↺</button>' : '') +
       (b.dup ? '<span class="dupflag" title="检测到重复书签">重复</span>' : '') +
@@ -667,12 +811,12 @@
         openMovePanel(btn.dataset.bid);
       };
     });
-    // 桌面：书签卡片右键 → 移动到分类面板（替代浏览器默认菜单）
+    // 桌面：书签卡片右键 → 自定义菜单（编辑 / 移动到级联）
     document.querySelectorAll('.link').forEach(function (a) {
       a.addEventListener('contextmenu', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        openMovePanel(a.dataset.bid);
+        openCtxMenu(a.dataset.bid, e.clientX, e.clientY);
       });
     });
     // 恢复自动分类
@@ -1048,11 +1192,14 @@
     } catch (e) {}
     // 清理 v0.5.2.9 及以前误存的垃圾键（当时用 {n, v} 而非真实 key 写入）
     try { chrome.storage.local.remove(['n', 'v']); } catch (e) {}
-    chrome.storage.local.get([LS_THEME, LS_QUICK, 'myNavOverrideV1'], function (cfg) {
+    chrome.storage.local.get([LS_THEME, LS_QUICK, 'myNavOverrideV1', 'myNavFavOverridesV1'], function (cfg) {
       if (cfg && cfg[LS_THEME]) dark = true;
       applyTheme(dark);
       if (cfg && cfg.myNavOverrideV1 && typeof cfg.myNavOverrideV1 === 'object') {
         OVERRIDES = cfg.myNavOverrideV1;
+      }
+      if (cfg && cfg.myNavFavOverridesV1 && typeof cfg.myNavFavOverridesV1 === 'object') {
+        FAV_OVERRIDES = cfg.myNavFavOverridesV1;
       }
       if (cfg && Array.isArray(cfg[LS_QUICK])) {
         quick = cfg[LS_QUICK].slice(0, QUICK_MAX);
@@ -1116,11 +1263,22 @@
         b.title = '删除书签';
       });
     }, true);
+    // 点击菜单外关闭右键菜单
+    document.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('#ctxMenu')) return;
+      closeCtxMenu();
+    }, true);
+    document.addEventListener('contextmenu', function (e) {
+      if (e.target.closest && e.target.closest('#ctxMenu')) return;
+      closeCtxMenu();
+    }, true);
     document.addEventListener('keydown', function (e) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('q').focus(); $('q').select(); }
       if (e.key === 'Escape') {
         $('modalMask').classList.remove('show');
         closeMovePanel();
+        closeCtxMenu();
+        closeEdit();
         $('suggest').classList.remove('show');
       }
     });
@@ -1141,6 +1299,36 @@
     // 移动到分类面板
     $('mMoveClose').onclick = closeMovePanel;
     $('moveMask').onclick = function (e) { if (e.target === $('moveMask')) closeMovePanel(); };
+    // 右键菜单
+    $('ctxMenu').addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopPropagation(); });
+    // 编辑面板
+    $('eClose').onclick = closeEdit;
+    $('eCancel').onclick = closeEdit;
+    $('editMask').onclick = function (e) { if (e.target === $('editMask')) closeEdit(); };
+    $('eSave').onclick = saveEdit;
+    $('eLogoReset').onclick = function () {
+      if (!EDIT_ID) return;
+      clearFavOverride(EDIT_ID);
+      renderEditLogo();
+      refreshCardFav(EDIT_ID);
+      toast('已重置为网站默认图标');
+    };
+    $('eLogoFile').onchange = function () {
+      var f = this.files && this.files[0];
+      this.value = '';
+      if (!f || !EDIT_ID) return;
+      if (!/^image\//.test(f.type)) { toast('请选择图片文件'); return; }
+      if (f.size > 1024 * 1024) { toast('图片需小于 1MB'); return; }
+      var r = new FileReader();
+      r.onload = function () {
+        setFavOverride(EDIT_ID, r.result);
+        renderEditLogo();
+        refreshCardFav(EDIT_ID);
+        toast('已应用自定义 Logo');
+      };
+      r.onerror = function () { toast('读取图片失败'); };
+      r.readAsDataURL(f);
+    };
     $('btnViewDup').onclick = function () { toggleView('dup'); };
     $('btnViewInvalid').onclick = function () { toggleView('invalid'); };
     $('btnDup').onclick = dedupe;
@@ -1148,6 +1336,21 @@
     $('btnScan').onclick = scanInvalid;
     $('btnOrganize').onclick = buildOrganizedFolder;
     $('btnExport').onclick = exportHtml;
+  }
+
+  // 编辑保存后刷新单张卡片的 favicon（无需整页 reload）
+  function refreshCardFav(id) {
+    var span = document.querySelector('.link[data-bid="' + id + '"] .fav');
+    if (!span) { reload(); return; }
+    var b = null;
+    for (var i = 0; i < ALL.length; i++) if (ALL[i].id === id) { b = ALL[i]; break; }
+    if (!b) { reload(); return; }
+    span.innerHTML = (b.host || '?').charAt(0).toUpperCase();
+    span.classList.remove('fav-white');
+    span.setAttribute('data-h', b.host);
+    span.setAttribute('data-bu', b.url); // attachFavicons 会消费并移除
+    span.setAttribute('data-bid', b.id);
+    attachFavicons(span.closest('.grid'));
   }
   document.addEventListener('DOMContentLoaded', init);
 })();

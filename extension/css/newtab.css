@@ -438,6 +438,80 @@ body.touch .mdel{opacity:1}
 .mv-new small{font-weight:500;opacity:.65}
 .mv-new:active{background:color-mix(in srgb,var(--accent) 16%,transparent)}
 
+/* ---------- 右键菜单（编辑 / 移动到级联） ---------- */
+.ctx-menu{
+  display:none;position:fixed;z-index:200;min-width:150px;padding:5px;border-radius:12px;
+  background:var(--card);border:1px solid var(--border);box-shadow:0 12px 40px rgba(0,0,0,.18);
+}
+.ctx-menu.show{display:block}
+.ctx-item{
+  display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;cursor:pointer;
+  font-size:13px;font-weight:600;color:var(--text);transition:background .15s;position:relative;
+}
+.ctx-item:hover{background:var(--bg)}
+.ctx-item svg{width:15px;height:15px;flex-shrink:0;color:var(--muted)}
+.ctx-item .ctx-arrow{margin-left:auto}
+.ctx-sub{
+  display:none;position:absolute;left:calc(100% + 2px);top:-5px;min-width:160px;max-height:340px;
+  overflow-y:auto;padding:5px;border-radius:12px;background:var(--card);border:1px solid var(--border);
+  box-shadow:0 12px 40px rgba(0,0,0,.18);
+}
+.ctx-has-sub:hover > .ctx-sub{display:block}
+.ctx-cat{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;
+  font-size:12.5px;font-weight:600;color:var(--text);transition:background .15s;position:relative;white-space:nowrap;
+}
+.ctx-cat:hover{background:var(--bg)}
+.ctx-cat .dot{width:8px;height:8px;border-radius:3px;flex-shrink:0}
+.ctx-cat .carrow{margin-left:auto;width:13px;height:13px;flex-shrink:0;color:var(--muted)}
+.ctx-cat .cnt{margin-left:8px;font-size:10.5px;color:var(--muted);font-weight:500}
+.ctx-sub2{
+  display:none;position:absolute;left:calc(100% + 2px);top:-5px;min-width:150px;max-height:340px;
+  overflow-y:auto;padding:5px;border-radius:12px;background:var(--card);border:1px solid var(--border);
+  box-shadow:0 12px 40px rgba(0,0,0,.18);
+}
+.ctx-cat:hover > .ctx-sub2{display:block}
+.ctx-leaf{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;
+  font-size:12.5px;font-weight:500;color:var(--muted);transition:background .15s,color .15s;white-space:nowrap;
+}
+.ctx-leaf::before{content:'';width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.5;flex-shrink:0}
+.ctx-leaf:hover{background:var(--bg);color:var(--text)}
+.ctx-leaf .cnt{margin-left:8px;font-size:10.5px;opacity:.7}
+
+/* ---------- 书签编辑面板 ---------- */
+#editMask{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:90;
+  backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;
+}
+#editMask.show{display:flex}
+.edit-body{display:flex;gap:22px}
+.edit-logo{width:150px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:10px}
+.e-logo-prev{
+  width:96px;height:96px;border-radius:20px;background:var(--bg);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.e-logo-prev img{width:100%;height:100%;object-fit:contain}
+.e-logo-prev .no{font-size:28px;font-weight:800;color:var(--muted)}
+.e-logo-ops{display:flex;flex-direction:column;gap:8px;width:100%}
+.e-up{
+  display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;
+  padding:7px 10px;font-size:12px;border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);
+  background:var(--card);color:var(--accent);border-radius:10px;font-weight:600;transition:all .15s;
+}
+.e-up:hover{background:var(--accent);color:#fff;border-color:transparent}
+.e-up svg{width:13px;height:13px}
+.e-logo-tip{font-size:10.5px;color:var(--muted);line-height:1.6;text-align:center}
+.edit-fields{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.e-label{font-size:12px;font-weight:700;color:var(--muted);margin-top:6px}
+.e-label:first-child{margin-top:0}
+.e-input{
+  width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);font-size:13.5px;font-family:inherit;outline:none;transition:box-shadow .15s,border-color .15s;
+}
+.e-input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.e-actions{display:flex;gap:8px;margin-top:18px;justify-content:flex-end}
+
 /* ---------- 触屏设备：hover 按钮常显、hover 特效改 :active ---------- */
 body.touch .link .qadd,
 body.touch .link .reauto{opacity:1}
@@ -506,8 +580,12 @@ footer b{color:var(--text)}
   .link .reauto{width:20px;height:20px;bottom:4px;left:6px}
   .link .dupflag{bottom:4px;right:6px;font-size:9px}
   /* 面板：底部弹出近全屏，拇指友好 */
-  #modalMask,#moveMask{padding:0;align-items:flex-end}
+  #modalMask,#moveMask,#editMask{padding:0;align-items:flex-end}
   .modal{max-width:none;max-height:92vh;border-radius:20px 20px 0 0;padding:22px 16px calc(18px + env(safe-area-inset-bottom))}
+  .edit-body{flex-direction:column;gap:16px}
+  .edit-logo{width:100%;flex-direction:row;align-items:center;justify-content:flex-start}
+  .e-logo-prev{width:64px;height:64px;border-radius:14px}
+  .e-logo-ops{flex-direction:row;width:auto;flex-wrap:wrap}
   .mrow{padding:12px 13px;flex-wrap:wrap}
   .mrow2{margin-left:auto}
   /* 安全区：底部手势条 */

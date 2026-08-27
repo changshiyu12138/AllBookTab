@@ -114,6 +114,53 @@
   </div>
 </div>
 
+<!-- 右键菜单（编辑 / 移动到级联） -->
+<div id="ctxMenu" class="ctx-menu">
+  <div class="ctx-item" id="ctxEdit" data-act="edit">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+    <span>编辑</span>
+  </div>
+  <div class="ctx-item ctx-has-sub" id="ctxMove" data-act="move">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3M9 5l2 2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-8l-2 2"/></svg>
+    <span>移动到</span>
+    <svg class="ctx-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+    <div class="ctx-sub" id="ctxSub"></div>
+  </div>
+</div>
+
+<!-- 书签编辑面板 -->
+<div id="editMask">
+  <div class="modal">
+    <button class="mclose" id="eClose">✕</button>
+    <h2>编辑书签</h2>
+    <div class="mdesc" id="eDesc"></div>
+    <div class="edit-body">
+      <div class="edit-logo">
+        <div class="e-logo-prev" id="eLogoPrev"></div>
+        <div class="e-logo-ops">
+          <label class="mbtn ghost e-up" for="eLogoFile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            上传自定义 Logo
+          </label>
+          <input type="file" id="eLogoFile" accept="image/*" hidden>
+          <button class="mbtn ghost" id="eLogoReset">重置 Logo</button>
+        </div>
+        <div class="e-logo-tip">支持 PNG / JPG，建议方形图片；自定义后此书签固定使用该图标。</div>
+      </div>
+      <div class="edit-fields">
+        <label class="e-label">标题</label>
+        <input class="e-input" id="eTitle" type="text" placeholder="书签标题">
+        <label class="e-label">网址</label>
+        <input class="e-input" id="eUrl" type="text" placeholder="https://…">
+        <div class="e-actions">
+          <button class="mbtn" id="eSave">保存</button>
+          <button class="mbtn ghost" id="eCancel">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script src="js/classifier.js"></script>
