@@ -561,6 +561,7 @@
     return '<a class="link" draggable="true" data-bid="' + esc(b.id) + '" href="' + esc(b.url) + '" target="_blank" rel="noopener" style="--brand:' + brand + '" data-tags="' + esc(b.tags.join(',')) + '" title="' + (IS_TOUCH ? '点击 ⋯ 可调整分类' : '按住可拖拽到左侧侧边栏调整分类') + '">' +
       '<button class="qadd' + (on ? ' on' : '') + '" data-url="' + esc(b.url) + '" data-title="' + esc(b.title) + '" title="' + (on ? '从快捷入口移除' : '加入快捷入口') + '">' + (on ? '★' : '☆') + '</button>' +
       (IS_TOUCH ? '<button class="mvbtn" data-bid="' + esc(b.id) + '" data-title="' + esc(b.title) + '" title="移动到分类">⋯</button>' : '') +
+      '<button class="delbtn" data-bid="' + esc(b.id) + '" title="删除书签"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6"/></svg></button>' +
       favHtml(b.host, b.url, brand) +
       '<span class="info"><span class="t">' + esc(b.title) + '</span><span class="d">' + esc(b.host) + '</span></span>' +
       (b.custom ? '<button class="reauto" data-bid="' + esc(b.id) + '" title="这个分类是我手动指定的，点击恢复自动分类">↺</button>' : '') +
@@ -692,6 +693,34 @@
         btn.textContent = isQuick(url) ? '★' : '☆';
         btn.classList.toggle('on', isQuick(url));
         btn.title = isQuick(url) ? '从快捷入口移除' : '加入快捷入口';
+      };
+    });
+    // 删除书签（两段式确认：第一次点击变深红，3 秒内再点一次才真正删除）
+    document.querySelectorAll('.delbtn').forEach(function (btn) {
+      btn.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!btn.classList.contains('armed')) {
+          btn.classList.add('armed');
+          btn.title = '再点一次确认删除';
+          btn._tm = setTimeout(function () {
+            btn.classList.remove('armed');
+            btn.title = '删除书签';
+          }, 3000);
+          return;
+        }
+        clearTimeout(btn._tm);
+        var id = btn.dataset.bid;
+        rmBookmark(id).then(function (ok) {
+          if (ok) {
+            toast('已删除书签');
+            reload();
+          } else {
+            toast('删除失败');
+            btn.classList.remove('armed');
+            btn.title = '删除书签';
+          }
+        });
       };
     });
 
@@ -959,6 +988,15 @@
       if (e.target.closest && (e.target.closest('#suggest') || e.target === $('q'))) return;
       s.classList.remove('show');
     });
+    // 点击其他位置取消删除按钮的确认态
+    document.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('.delbtn')) return;
+      document.querySelectorAll('.delbtn.armed').forEach(function (b) {
+        clearTimeout(b._tm);
+        b.classList.remove('armed');
+        b.title = '删除书签';
+      });
+    }, true);
     document.addEventListener('keydown', function (e) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('q').focus(); $('q').select(); }
       if (e.key === 'Escape') {

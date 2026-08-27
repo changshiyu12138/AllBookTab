@@ -254,6 +254,15 @@ main{flex:1;min-width:0;padding:0}
   background:color-mix(in srgb,var(--brand,#0071e3) 13%,transparent);color:var(--muted);z-index:2;
   font-size:13px;line-height:1;
 }
+.link .delbtn{
+  position:absolute;top:34px;right:6px;width:24px;height:24px;border-radius:8px;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s,background .15s,color .15s;padding:0;
+  background:color-mix(in srgb,#e11d48 10%,transparent);color:#f87171;z-index:2;
+}
+.link .delbtn svg{width:13px;height:13px}
+.link:hover .delbtn{opacity:1}
+.link .delbtn:hover{transform:scale(1.1)}
+.link .delbtn.armed{opacity:1;background:#e11d48;color:#fff}
 .link:hover{transform:translateY(-2px);box-shadow:0 6px 18px color-mix(in srgb,var(--brand,#0071e3) 22%,transparent);
   border-color:color-mix(in srgb,var(--brand,#0071e3) 55%,transparent)}
 .link .fav{width:32px;height:32px;border-radius:10px;font-size:14px}
@@ -409,6 +418,7 @@ main{flex:1;min-width:0;padding:0}
 /* ---------- 触屏设备：hover 按钮常显、hover 特效改 :active ---------- */
 body.touch .link .qadd,
 body.touch .link .reauto{opacity:1}
+body.touch .link .delbtn{opacity:1}
 body.touch .qw .qdel{display:flex;opacity:1}
 body.touch .link:hover{transform:none;box-shadow:var(--shadow)}
 body.touch .link:active{transform:scale(.97)}
@@ -467,6 +477,8 @@ footer b{color:var(--text)}
   .link .qadd,.link .mvbtn{width:22px;height:22px;top:5px}
   .link .mvbtn{right:30px;font-size:12px}
   .link .qadd{right:5px}
+  .link .delbtn{width:22px;height:22px;top:31px;right:5px}
+  .link .delbtn svg{width:12px;height:12px}
   .link .reauto{width:20px;height:20px;bottom:4px;left:6px}
   .link .dupflag{bottom:4px;right:6px;font-size:9px}
   /* 面板：底部弹出近全屏，拇指友好 */
