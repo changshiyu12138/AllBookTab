@@ -415,8 +415,7 @@
     var tagSet = {};
     ALL.forEach(function (b) { b.tags.forEach(function (t) { tagSet[t] = 1; }); });
     $('statsLine').innerHTML = '共 <b>' + ALL.length + '</b> 个站点 · <b>' + Object.keys(cats).length +
-      '</b> 个分类 · <b>' + Object.keys(tagSet).length + '</b> 个标签 · 检测到 <b>' + DUPS.length +
-      '</b> 个重复 · <b>' + INVALID.length + '</b> 个无效';
+      '</b> 个分类 · <b>' + Object.keys(tagSet).length + '</b> 个标签';
   }
 
   function renderQuick() {
