@@ -50,11 +50,11 @@ a{color:inherit;text-decoration:none}
 #suggest a:hover{background:var(--bg)}
 #suggest a:active{background:var(--bg)}
 #suggest .sico{
-  width:26px;height:26px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
-  color:#fff;font-size:13px;font-weight:800;
+  width:26px;height:26px;border-radius:8px;flex-shrink:0;
+  background-size:contain;background-position:center;background-repeat:no-repeat;
 }
-#suggest .sico.s-bd{background:#2932e1}
-#suggest .sico.s-g{background:#4285f4}
+#suggest .sico.s-bd{background-color:#fff;background-image:url('https://favicon.im/baidu.com?larger=true')}
+#suggest .sico.s-g{background-color:#fff;background-image:url('https://favicon.im/google.com?larger=true')}
 #suggest .s-t{font-size:13px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #suggest .s-kw{color:var(--accent);font-weight:700}
 #suggest a:first-child{margin-bottom:2px}

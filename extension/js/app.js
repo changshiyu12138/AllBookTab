@@ -936,8 +936,8 @@
       var e = esc(raw);
       var q = encodeURIComponent(raw);
       box.innerHTML =
-        '<a href="https://www.baidu.com/s?wd=' + q + '" target="_blank" rel="noopener"><span class="sico s-bd">B</span><span class="s-t">百度搜索<span class="s-kw">“' + e + '”</span></span></a>' +
-        '<a href="https://www.google.com/search?q=' + q + '" target="_blank" rel="noopener"><span class="sico s-g">G</span><span class="s-t">谷歌搜索<span class="s-kw">“' + e + '”</span></span></a>';
+        '<a href="https://www.baidu.com/s?wd=' + q + '" target="_blank" rel="noopener" title="百度搜索 ' + e + '"><span class="sico s-bd" aria-hidden="true"></span><span class="s-t">百度搜索<span class="s-kw">“' + e + '”</span></span></a>' +
+        '<a href="https://www.google.com/search?q=' + q + '" target="_blank" rel="noopener" title="谷歌搜索 ' + e + '"><span class="sico s-g" aria-hidden="true"></span><span class="s-t">谷歌搜索<span class="s-kw">“' + e + '”</span></span></a>';
       box.classList.add('show');
     }
     document.addEventListener('click', function (e) {
