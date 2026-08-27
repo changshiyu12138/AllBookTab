@@ -415,6 +415,13 @@ body.touch .mdel{opacity:1}
 .mv-item:hover{background:var(--bg)}
 .mv-item .dot{width:9px;height:9px;border-radius:3px;flex-shrink:0}
 .mv-item .n{margin-left:auto;font-size:10.5px;color:var(--muted);font-weight:500}
+/* 当前所在分类/子分类高亮 */
+.mv-item.cur{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.mv-item.cur .nm{color:var(--accent)}
+.mv-item.cur .n{color:var(--accent);font-weight:700}
+.mv-sub.cur{color:var(--accent);font-weight:700}
+.mv-sub.cur::before{background:var(--accent);opacity:1}
+.mv-sub.cur .sn{color:var(--accent);font-weight:700}
 .mv-sub{
   display:flex;align-items:center;gap:8px;padding:7px 12px 7px 30px;border-radius:9px;cursor:pointer;
   font-size:12.5px;font-weight:500;color:var(--muted);transition:background .15s,color .15s;

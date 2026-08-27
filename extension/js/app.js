@@ -344,7 +344,7 @@
     assignOverride(id, cat, sub);
   }
 
-  // ============ 移动到分类（触屏替代拖拽） ============
+  // ============ 移动到分类（右键菜单 / 触屏 ⋯ 按钮） ============
   function openMovePanel(id) {
     MOVE_ID = id;
     var b = null;
@@ -368,11 +368,14 @@
     var html = '';
     cats.forEach(function (cat) {
       var subs = Object.keys(byCat[cat]).sort(function (a, b) { return byCat[cat][b] - byCat[cat][a]; });
+      // 当前所在分类高亮（知道书签现在在哪）
+      var cur = b && b.cat === cat;
       html += '<div class="mv-group">' +
-        '<div class="mv-item" data-cat="' + esc(cat) + '"><span class="dot" style="background:' + themeColor(cat) + '"></span><span class="nm">' + esc(cat) + '</span><span class="n">' + (subs.length ? '整个分类' : byCat[cat][subs[0]]) + '</span></div>';
+        '<div class="mv-item' + (cur ? ' cur' : '') + '" data-cat="' + esc(cat) + '"><span class="dot" style="background:' + themeColor(cat) + '"></span><span class="nm">' + esc(cat) + '</span><span class="n">' + (cur ? '当前' : (subs.length ? '整个分类' : byCat[cat][subs[0]])) + '</span></div>';
       if (subs.length > 1) {
         subs.forEach(function (sub) {
-          html += '<div class="mv-sub" data-cat="' + esc(cat) + '" data-sub="' + esc(sub) + '"><span class="snm">' + esc(sub) + '</span><span class="sn">' + byCat[cat][sub] + '</span></div>';
+          var csub = cur && b.sub === sub;
+          html += '<div class="mv-sub' + (csub ? ' cur' : '') + '" data-cat="' + esc(cat) + '" data-sub="' + esc(sub) + '"><span class="snm">' + esc(sub) + '</span><span class="sn">' + (csub ? '当前' : byCat[cat][sub]) + '</span></div>';
         });
       }
       html += '</div>';
@@ -663,6 +666,14 @@
         e.stopPropagation();
         openMovePanel(btn.dataset.bid);
       };
+    });
+    // 桌面：书签卡片右键 → 移动到分类面板（替代浏览器默认菜单）
+    document.querySelectorAll('.link').forEach(function (a) {
+      a.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openMovePanel(a.dataset.bid);
+      });
     });
     // 恢复自动分类
     document.querySelectorAll('.reauto').forEach(function (btn) {
