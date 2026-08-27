@@ -925,13 +925,33 @@
     var tm = null;
     $('q').addEventListener('input', function () {
       clearTimeout(tm);
-      tm = setTimeout(function () { kw = $('q').value.trim().toLowerCase(); renderMain(); }, 120);
+      tm = setTimeout(function () { kw = $('q').value.trim().toLowerCase(); renderMain(); updateSuggest(); }, 120);
+    });
+    // 搜索无结果 → 显示外部搜索（百度/谷歌）候选项
+    function updateSuggest() {
+      var box = $('suggest');
+      var raw = $('q').value.trim();
+      var empty = $('empty').classList.contains('show');
+      if (!raw || !empty) { box.classList.remove('show'); box.innerHTML = ''; return; }
+      var e = esc(raw);
+      var q = encodeURIComponent(raw);
+      box.innerHTML =
+        '<a href="https://www.baidu.com/s?wd=' + q + '" target="_blank" rel="noopener"><span class="sico s-bd">B</span><span class="s-t">百度搜索<span class="s-kw">“' + e + '”</span></span></a>' +
+        '<a href="https://www.google.com/search?q=' + q + '" target="_blank" rel="noopener"><span class="sico s-g">G</span><span class="s-t">谷歌搜索<span class="s-kw">“' + e + '”</span></span></a>';
+      box.classList.add('show');
+    }
+    document.addEventListener('click', function (e) {
+      var s = $('suggest');
+      if (!s.classList.contains('show')) return;
+      if (e.target.closest && (e.target.closest('#suggest') || e.target === $('q'))) return;
+      s.classList.remove('show');
     });
     document.addEventListener('keydown', function (e) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('q').focus(); $('q').select(); }
       if (e.key === 'Escape') {
         $('modalMask').classList.remove('show');
         closeMovePanel();
+        $('suggest').classList.remove('show');
       }
     });
 
