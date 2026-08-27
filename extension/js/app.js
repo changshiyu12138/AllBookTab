@@ -695,36 +695,42 @@
       };
     });
     // 删除书签（两段式确认：第一次点击变深红，3 秒内再点一次才真正删除）
-    document.querySelectorAll('.delbtn').forEach(function (btn) {
-      btn.onclick = function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!btn.classList.contains('armed')) {
-          btn.classList.add('armed');
-          btn.title = '再点一次确认删除';
-          btn._tm = setTimeout(function () {
-            btn.classList.remove('armed');
-            btn.title = '删除书签';
-          }, 3000);
-          return;
-        }
-        clearTimeout(btn._tm);
-        var id = btn.dataset.bid;
-        rmBookmark(id).then(function (ok) {
-          if (ok) {
-            toast('已删除书签');
-            reload();
-          } else {
-            toast('删除失败');
-            btn.classList.remove('armed');
-            btn.title = '删除书签';
-          }
-        });
-      };
+    document.querySelectorAll('.link .delbtn').forEach(function (btn) {
+      bindDelBtn(btn);
     });
 
     renderSidebar(catStats, subStats);
     setupObserver();
+  }
+
+  /* 删除按钮通用绑定（两段式确认：第一次点击变深红，3 秒内再点一次才真正删除）
+   * 首页卡片与整理面板明细共用；afterDel 为删除成功后的额外动作（默认 reload） */
+  function bindDelBtn(btn, afterDel) {
+    btn.onclick = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!btn.classList.contains('armed')) {
+        btn.classList.add('armed');
+        btn.title = '再点一次确认删除';
+        btn._tm = setTimeout(function () {
+          btn.classList.remove('armed');
+          btn.title = '删除书签';
+        }, 3000);
+        return;
+      }
+      clearTimeout(btn._tm);
+      var id = btn.dataset.bid;
+      rmBookmark(id).then(function (ok) {
+        if (ok) {
+          toast('已删除书签');
+          if (afterDel) afterDel(); else reload();
+        } else {
+          toast('删除失败');
+          btn.classList.remove('armed');
+          btn.title = '删除书签';
+        }
+      });
+    };
   }
 
   function hashId(s) {
@@ -870,7 +876,10 @@
     if (!INVALID.length) return '<div class="dempty">没有无效书签</div>';
     return INVALID.map(function (b) {
       return '<div class="dgroup"><div class="dgurl">' + esc(b.url) + '</div>' +
-        bmItem(b, b.scan ? '扫描失效' : '无效', b.scan ? 'scan' : 'del') + '</div>';
+        bmItem(b, b.scan ? '扫描失效' : '无效', b.scan ? 'scan' : 'del') +
+        '<button class="mdel" data-bid="' + esc(b.id) + '" title="删除书签">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6"/></svg></button>' +
+        '</div>';
     }).join('');
   }
   function toggleView(kind) {
@@ -882,6 +891,23 @@
       return;
     }
     box.innerHTML = kind === 'dup' ? renderDupList() : renderInvalidList();
+    if (kind === 'invalid') {
+      // 明细里每条无效书签的删除按钮（两段式确认，删除后保持面板打开并刷新明细）
+      var bindInvalidDels = function () {
+        box.querySelectorAll('.mdel').forEach(function (b) {
+          bindDelBtn(b, function () {
+            reload().then(function () {
+              openOrganize();
+              $('invalidList').innerHTML = renderInvalidList();
+              $('invalidList').classList.add('show');
+              $('btnViewInvalid').textContent = '收起';
+              bindInvalidDels();
+            });
+          });
+        });
+      };
+      bindInvalidDels();
+    }
     box.classList.add('show');
     btn.textContent = '收起';
   }
@@ -1072,8 +1098,8 @@
     });
     // 点击其他位置取消删除按钮的确认态
     document.addEventListener('click', function (e) {
-      if (e.target.closest && e.target.closest('.delbtn')) return;
-      document.querySelectorAll('.delbtn.armed').forEach(function (b) {
+      if (e.target.closest && e.target.closest('.delbtn, .mdel')) return;
+      document.querySelectorAll('.delbtn.armed, .mdel.armed').forEach(function (b) {
         clearTimeout(b._tm);
         b.classList.remove('armed');
         b.title = '删除书签';

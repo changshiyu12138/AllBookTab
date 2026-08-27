@@ -376,6 +376,17 @@ main{flex:1;min-width:0;padding:0}
   font-size:12.5px;color:var(--text);text-decoration:none;
 }
 .ditem a:hover{color:var(--accent)}
+/* 无效明细里每条右侧的删除按钮（两段式确认，样式与首页 delbtn 一致） */
+.mdel{
+  flex-shrink:0;width:22px;height:22px;border-radius:7px;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;opacity:0;
+  background:color-mix(in srgb,#e11d48 10%,transparent);color:#f87171;
+  transition:opacity .15s,background .15s,color .15s;
+}
+.mdel svg{width:12px;height:12px}
+.ditem:hover .mdel{opacity:1}
+.mdel.armed{opacity:1;background:#e11d48;color:#fff}
+body.touch .mdel{opacity:1}
 .dpath{
   flex-shrink:0;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-size:10.5px;color:var(--muted);
