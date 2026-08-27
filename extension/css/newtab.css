@@ -255,7 +255,7 @@ main{flex:1;min-width:0;padding:0}
   font-size:13px;line-height:1;
 }
 .link .delbtn{
-  position:absolute;top:6px;right:34px;width:24px;height:24px;border-radius:8px;border:none;cursor:pointer;
+  position:absolute;top:34px;right:6px;width:24px;height:24px;border-radius:8px;border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s,background .15s,color .15s;padding:0;
   background:color-mix(in srgb,#e11d48 10%,transparent);color:#f87171;z-index:2;
 }
@@ -263,13 +263,12 @@ main{flex:1;min-width:0;padding:0}
 .link:hover .delbtn{opacity:1}
 .link .delbtn:hover{transform:scale(1.1)}
 .link .delbtn.armed{opacity:1;background:#e11d48;color:#fff}
-/* 触屏下 mvbtn（⋯）占 right:34px，删除按钮让位到其左侧 */
-body.touch .link .delbtn{right:62px}
 .link:hover{transform:translateY(-2px);box-shadow:0 6px 18px color-mix(in srgb,var(--brand,#0071e3) 22%,transparent);
   border-color:color-mix(in srgb,var(--brand,#0071e3) 55%,transparent)}
 .link .fav{width:32px;height:32px;border-radius:10px;font-size:14px}
 .link .info{min-width:0;flex:1}
-.link .t{font-size:13.5px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all}
+.link .t{font-size:13.5px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all;
+  min-height:36.5px; /* 标题统一占两行高度，保证所有卡片等高 */}
 .link .d{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .link .dupflag{position:absolute;bottom:6px;right:8px;font-size:10px;color:#f59e0b;font-weight:700}
 
@@ -474,14 +473,13 @@ footer b{color:var(--text)}
   .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px} /* 小屏固定 2 列紧凑 */
   .link{padding:9px 10px;gap:9px;border-radius:12px}
   .link .fav{width:28px;height:28px;border-radius:8px;font-size:12px}
-  .link .t{font-size:12px}
+  .link .t{font-size:12px;min-height:32.4px} /* 小屏字号两行高度 */
   .link .d{font-size:10px}
-  .link .qadd,.link .mvbtn,.link .delbtn{width:22px;height:22px;top:5px}
+  .link .qadd,.link .mvbtn{width:22px;height:22px;top:5px}
   .link .mvbtn{right:30px;font-size:12px}
   .link .qadd{right:5px}
-  .link .delbtn{right:30px}
+  .link .delbtn{width:22px;height:22px;top:31px;right:5px}
   .link .delbtn svg{width:12px;height:12px}
-  body.touch .link .delbtn{right:56px}
   .link .reauto{width:20px;height:20px;bottom:4px;left:6px}
   .link .dupflag{bottom:4px;right:6px;font-size:9px}
   /* 面板：底部弹出近全屏，拇指友好 */
