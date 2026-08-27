@@ -563,7 +563,7 @@
       (IS_TOUCH ? '<button class="mvbtn" data-bid="' + esc(b.id) + '" data-title="' + esc(b.title) + '" title="移动到分类">⋯</button>' : '') +
       '<button class="delbtn" data-bid="' + esc(b.id) + '" title="删除书签"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6"/></svg></button>' +
       favHtml(b.host, b.url, brand) +
-      '<span class="info"><span class="t">' + esc(b.title) + '</span><span class="d">' + esc(b.host) + '</span></span>' +
+      '<span class="info"><span class="t-wrap"><span class="t">' + esc(b.title) + '</span></span><span class="d">' + esc(b.host) + '</span></span>' +
       (b.custom ? '<button class="reauto" data-bid="' + esc(b.id) + '" title="这个分类是我手动指定的，点击恢复自动分类">↺</button>' : '') +
       (b.dup ? '<span class="dupflag" title="检测到重复书签">重复</span>' : '') +
       '</a>';
