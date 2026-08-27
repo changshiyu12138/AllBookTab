@@ -750,7 +750,82 @@
   }
 
   // ============ 整理面板 ============
+  var SCAN_RESULTS = []; // 扫描发现的失效书签 [{id,title,url,path}]
+  var SCANNING = false;  // 扫描进行中
+
+  /* 探测单个 URL 的网络可达性：
+   * no-cors + HEAD：服务器可达（含 404/403/登录页）→ resolve；
+   * DNS 解析失败 / 连接被拒 / 超时 → reject。只标记"完全无法连接"的死链，
+   * 不误报需要登录或反爬拦截的站点；无需任何额外权限。 */
+  function probeReach(url) {
+    return new Promise(function (res) {
+      if (!/^https?:\/\//i.test(url)) return res(false);
+      var ctrl = new AbortController();
+      var t = setTimeout(function () { ctrl.abort(); res(false); }, 8000);
+      fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-store', signal: ctrl.signal })
+        .then(function () { clearTimeout(t); res(true); })
+        .catch(function () { clearTimeout(t); res(false); });
+    });
+  }
+
+  // 扫描后把仍存在的失效书签并入 INVALID（reload 后也要保持，避免扫描结果丢失）
+  function mergeScanIntoInvalid() {
+    var ids = {};
+    ALL.forEach(function (b) { ids[b.id] = 1; });
+    var inInvalid = {};
+    INVALID.forEach(function (b) { inInvalid[b.id] = 1; });
+    SCAN_RESULTS.forEach(function (b) {
+      if (ids[b.id] && !inInvalid[b.id]) { b.scan = true; INVALID.push(b); }
+    });
+    SCAN_RESULTS = SCAN_RESULTS.filter(function (b) { return ids[b.id]; }); // 清理已被删除的
+  }
+
+  async function scanInvalid() {
+    if (SCANNING) return;
+    if (!ALL.length) { toast('没有可扫描的书签'); return; }
+    var n = ALL.length;
+    var msg = '即将对全部 ' + n + ' 个书签的网址发起连通性探测。\n\n' +
+      '⚠️ 注意事项：\n' +
+      '1. 仅能检测「完全无法连接」的书签（网站关闭、域名失效、连接超时）\n' +
+      '2. 需要登录、被反爬拦截或返回 404 的网站可能无法准确识别，不会误报\n' +
+      '3. 网络波动可能造成个别误报，结果仅供参考，删除前请逐条查看确认\n' +
+      '4. 为降低对网站的打扰，扫描会限速进行，约需 1 分钟\n\n确定开始扫描吗？';
+    if (!confirm(msg)) return;
+    SCANNING = true;
+    var btn = $('btnScan');
+    btn.disabled = true;
+    btn.textContent = '扫描中…';
+    $('scanDesc').textContent = '正在扫描 0/' + n;
+    SCAN_RESULTS = [];
+    var done = 0;
+    var queue = ALL.slice();
+    async function worker() {
+      while (queue.length) {
+        var b = queue.shift();
+        var ok = await probeReach(b.url);
+        if (!ok) SCAN_RESULTS.push(b);
+        done++;
+        if (done % 10 === 0 || done === n) {
+          $('scanDesc').textContent = '正在扫描 ' + done + '/' + n + '，发现 ' + SCAN_RESULTS.length + ' 个';
+        }
+        await new Promise(function (r) { setTimeout(r, 60); }); // 限速
+      }
+    }
+    var workers = [];
+    for (var i = 0; i < 8; i++) workers.push(worker()); // 8 路并发
+    await Promise.all(workers);
+    SCANNING = false;
+    btn.disabled = false;
+    btn.textContent = '重新扫描';
+    mergeScanIntoInvalid();
+    $('scanDesc').textContent = '扫描完成：发现 ' + SCAN_RESULTS.length + ' 个可能失效（已并入下方无效书签，查看后确认清理）';
+    toast('扫描完成，发现 ' + SCAN_RESULTS.length + ' 个可能失效的书签');
+    openOrganize();
+  }
+
   function openOrganize() {
+    var scanN = 0;
+    INVALID.forEach(function (b) { if (b.scan) scanN++; });
     $('mStats').innerHTML =
       '<div class="mstat"><b>' + ALL.length + '</b><span>有效书签</span></div>' +
       '<div class="mstat"><b style="color:#f59e0b">' + DUPS.length + '</b><span>重复书签</span></div>' +
@@ -759,12 +834,14 @@
       ? '保留每组最早加入的一个，删除其余 ' + DUPS.length + ' 个（按 URL 去参数后完全相同才算重复）'
       : '未发现重复书签';
     $('invalidDesc').textContent = INVALID.length
-      ? '浏览器内部页面等无法访问的书签，共 ' + INVALID.length + ' 个'
+      ? '共 ' + INVALID.length + ' 个（' + (INVALID.length - scanN) + ' 个内部页面 + ' + scanN + ' 个扫描失效）'
       : '未发现无效书签';
     $('btnDup').disabled = !DUPS.length;
     $('btnInvalid').disabled = !INVALID.length;
     $('btnViewDup').disabled = !DUPS.length;
     $('btnViewInvalid').disabled = !INVALID.length;
+    $('btnScan').disabled = SCANNING;
+    $('btnScan').textContent = SCANNING ? '扫描中…' : (SCAN_RESULTS.length ? '重新扫描' : '开始扫描');
     // 重新打开时收起上次的明细
     [['dupList', 'btnViewDup'], ['invalidList', 'btnViewInvalid']].forEach(function (p) {
       $(p[0]).classList.remove('show'); $(p[0]).innerHTML = '';
@@ -793,7 +870,7 @@
     if (!INVALID.length) return '<div class="dempty">没有无效书签</div>';
     return INVALID.map(function (b) {
       return '<div class="dgroup"><div class="dgurl">' + esc(b.url) + '</div>' +
-        bmItem(b, '无效', 'del') + '</div>';
+        bmItem(b, b.scan ? '扫描失效' : '无效', b.scan ? 'scan' : 'del') + '</div>';
     }).join('');
   }
   function toggleView(kind) {
@@ -838,7 +915,10 @@
   }
   async function cleanInvalid() {
     if (!INVALID.length) return;
-    if (!confirm('确定删除 ' + INVALID.length + ' 个无效书签吗？（浏览器内部页面等）')) return;
+    var scanN = 0;
+    INVALID.forEach(function (b) { if (b.scan) scanN++; });
+    if (!confirm('确定删除 ' + INVALID.length + ' 个无效书签吗？\n' +
+      '（其中 ' + scanN + ' 个来自扫描标记，可能为误报，删除前建议先「查看」逐个确认）')) return;
     var ok = 0;
     for (var i = 0; i < INVALID.length; i++) if (await rmBookmark(INVALID[i].id)) ok++;
     toast('已删除 ' + ok + ' 个无效书签');
@@ -914,6 +994,7 @@
     var dirty = false;
     Object.keys(OVERRIDES).forEach(function (k) { if (!ids[k]) { delete OVERRIDES[k]; dirty = true; } });
     if (dirty) saveOverrides();
+    mergeScanIntoInvalid(); // 扫描标记的失效书签在书签刷新后保持
     renderStats(); renderTagbar(); renderMain(); renderQuick();
   }
 
@@ -1025,6 +1106,7 @@
     $('btnViewInvalid').onclick = function () { toggleView('invalid'); };
     $('btnDup').onclick = dedupe;
     $('btnInvalid').onclick = cleanInvalid;
+    $('btnScan').onclick = scanInvalid;
     $('btnOrganize').onclick = buildOrganizedFolder;
     $('btnExport').onclick = exportHtml;
   }
