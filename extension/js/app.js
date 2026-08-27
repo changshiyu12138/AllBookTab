@@ -927,15 +927,15 @@
       clearTimeout(tm);
       tm = setTimeout(function () { kw = $('q').value.trim().toLowerCase(); renderMain(); updateSuggest(); }, 120);
     });
-    // 搜索无结果 → 显示外部搜索（百度/谷歌）候选项
+    // 搜索框输入 → 实时渲染外部搜索（百度/谷歌）候选项（无论有无书签结果）
     function updateSuggest() {
       var box = $('suggest');
       var raw = $('q').value.trim();
-      var empty = $('empty').classList.contains('show');
-      if (!raw || !empty) { box.classList.remove('show'); box.innerHTML = ''; return; }
+      if (!raw) { box.classList.remove('show'); box.innerHTML = ''; return; }
       var e = esc(raw);
       var q = encodeURIComponent(raw);
       box.innerHTML =
+        '<div class="s-head">外部搜索</div>' +
         '<a href="https://www.baidu.com/s?wd=' + q + '" target="_blank" rel="noopener" title="百度搜索 ' + e + '"><span class="sico s-bd" aria-hidden="true"></span><span class="s-t">百度搜索<span class="s-kw">“' + e + '”</span></span></a>' +
         '<a href="https://www.google.com/search?q=' + q + '" target="_blank" rel="noopener" title="谷歌搜索 ' + e + '"><span class="sico s-g" aria-hidden="true"></span><span class="s-t">谷歌搜索<span class="s-kw">“' + e + '”</span></span></a>';
       box.classList.add('show');
