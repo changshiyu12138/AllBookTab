@@ -36,6 +36,15 @@ a{color:inherit;text-decoration:none}
   position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted);
   border:1px solid var(--border);border-radius:6px;padding:1px 6px;background:var(--bg);font-family:inherit;
 }
+.search .qclear{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);width:20px;height:20px;
+  border:none;border-radius:99px;cursor:pointer;padding:0;line-height:1;
+  display:none;align-items:center;justify-content:center;font-size:10px;color:var(--muted);
+  background:color-mix(in srgb,var(--muted) 18%,transparent);transition:background .15s,color .15s;
+}
+.search .qclear:hover{background:color-mix(in srgb,var(--muted) 32%,transparent);color:var(--text)}
+.search.has-q kbd{display:none}
+.search.has-q .qclear{display:flex}
 /* 搜索无结果时的外部搜索候选项（百度/谷歌） */
 #suggest{
   position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:120;

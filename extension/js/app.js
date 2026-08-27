@@ -923,10 +923,23 @@
 
     // 搜索
     var tm = null;
+    function syncQClear() {
+      $('q').parentElement.classList.toggle('has-q', $('q').value.length > 0);
+    }
     $('q').addEventListener('input', function () {
+      syncQClear();
       clearTimeout(tm);
       tm = setTimeout(function () { kw = $('q').value.trim().toLowerCase(); renderMain(); updateSuggest(); }, 120);
     });
+    // 清除搜索
+    $('qClear').onclick = function () {
+      $('q').value = '';
+      syncQClear();
+      kw = '';
+      $('suggest').classList.remove('show');
+      renderMain();
+      $('q').focus();
+    };
     // 搜索框输入 → 实时渲染外部搜索（百度/谷歌）候选项（无论有无书签结果）
     function updateSuggest() {
       var box = $('suggest');
