@@ -476,18 +476,24 @@
     $('ctxSub').querySelectorAll('.ctx-cat').forEach(function (it) {
       it.onclick = function (e) { e.stopPropagation(); }; // 有二级的一级目录本身不直接移动
     });
-    // 编辑
+    // 编辑（先保存 id，closeCtxMenu 会清空 CTX_ID）
     $('ctxEdit').onclick = function (e) {
       e.stopPropagation();
+      var id = CTX_ID;
       closeCtxMenu();
-      openEdit(CTX_ID);
+      openEdit(id);
     };
-    // 定位（防溢出）：为右侧级联子菜单预留约 320px 空间
+    // 定位（防溢出）：先测量子菜单实际高度，保证一级目录全部展开且不超出屏幕
     var m = $('ctxMenu');
     m.classList.add('show');
+    var subEl = $('ctxSub');
+    var oldDisp = subEl.style.display;
+    subEl.style.display = 'block'; // 同帧测量（立即恢复，不闪烁）
+    var subH = subEl.offsetHeight || 0;
+    subEl.style.display = oldDisp;
     var r = m.getBoundingClientRect();
     var px = Math.min(x, window.innerWidth - Math.max(r.width, 320) - 8);
-    var py = Math.min(y, window.innerHeight - r.height - 8);
+    var py = Math.min(y, window.innerHeight - Math.max(r.height, subH + 12) - 8);
     m.style.left = Math.max(4, px) + 'px';
     m.style.top = Math.max(4, py) + 'px';
   }
