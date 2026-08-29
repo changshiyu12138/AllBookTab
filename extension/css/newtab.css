@@ -457,6 +457,9 @@ body.touch .mdel{opacity:1}
   box-shadow:0 12px 40px rgba(0,0,0,.18);
 }
 .ctx-has-sub:hover > .ctx-sub{display:block}
+/* 一级目录超高时向上展开（避免超出屏幕底部） */
+.ctx-menu.sub-up .ctx-sub{top:auto;bottom:-5px}
+.ctx-menu.sub-up .ctx-sub2{top:auto;bottom:-5px}
 .ctx-cat{
   display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;
   font-size:12.5px;font-weight:600;color:var(--text);transition:background .15s;position:relative;white-space:nowrap;

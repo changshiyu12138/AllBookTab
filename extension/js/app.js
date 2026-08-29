@@ -483,19 +483,21 @@
       closeCtxMenu();
       openEdit(id);
     };
-    // 定位（防溢出）：先测量子菜单实际高度，保证一级目录全部展开且不超出屏幕
+    // 定位：主菜单贴近鼠标（只防自身溢出）；子菜单若超高则向上展开
     var m = $('ctxMenu');
     m.classList.add('show');
+    var r = m.getBoundingClientRect();
+    var px = Math.min(x, window.innerWidth - r.width - 8);
+    var py = Math.min(y, window.innerHeight - r.height - 8);
+    m.style.left = Math.max(4, px) + 'px';
+    m.style.top = Math.max(4, py) + 'px';
+    // 测量子菜单高度，决定展开方向（向下放不下 → 向上）
     var subEl = $('ctxSub');
     var oldDisp = subEl.style.display;
     subEl.style.display = 'block'; // 同帧测量（立即恢复，不闪烁）
     var subH = subEl.offsetHeight || 0;
     subEl.style.display = oldDisp;
-    var r = m.getBoundingClientRect();
-    var px = Math.min(x, window.innerWidth - Math.max(r.width, 320) - 8);
-    var py = Math.min(y, window.innerHeight - Math.max(r.height, subH + 12) - 8);
-    m.style.left = Math.max(4, px) + 'px';
-    m.style.top = Math.max(4, py) + 'px';
+    m.classList.toggle('sub-up', py + subH > window.innerHeight - 8);
   }
   function closeCtxMenu() {
     CTX_ID = null;
@@ -525,19 +527,24 @@
     box.innerHTML = '';
     if (FAV_OVERRIDES[EDIT_ID]) {
       var i1 = new Image();
-      i1.onload = function () { box.appendChild(i1); };
+      i1.onload = function () { if (box.isConnected) box.appendChild(i1); };
       i1.src = FAV_OVERRIDES[EDIT_ID];
       return;
     }
     var b = null;
     for (var i = 0; i < ALL.length; i++) if (ALL[i].id === EDIT_ID) { b = ALL[i]; break; }
+    // 先显示占位字母，图片加载成功后再替换（避免字母与图片共存破坏居中）
+    box.innerHTML = '<span class="no">' + (b.host || '?').charAt(0).toUpperCase() + '</span>';
     loadFavUrl(b.host, b.url).then(function (src) {
       if (!src || !box.isConnected) return;
       var i2 = new Image();
-      i2.onload = function () { box.appendChild(i2); };
+      i2.onload = function () {
+        if (!box.isConnected) return;
+        box.innerHTML = '';
+        box.appendChild(i2);
+      };
       i2.src = src;
     });
-    if (!FAV_OVERRIDES[EDIT_ID]) box.innerHTML = '<span class="no">' + (b.host || '?').charAt(0).toUpperCase() + '</span>';
   }
   function saveEdit() {
     var title = $('eTitle').value.trim();
