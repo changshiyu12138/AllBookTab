@@ -659,11 +659,11 @@
         '<div class="side-item" data-cat="' + esc(cs.cat) + '"><span class="dot" style="background:' + themeColor(cs.cat) + '"></span>' +
         '<span class="nm">' + esc(cs.cat) + '</span><span class="n">' + cs.n + '</span>' +
         '<span class="chev"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></span></div>' +
-        '<div class="side-subs">';
+        '<div class="side-subs"><div class="side-subs-inner">';
       (subStats[cs.cat] || []).forEach(function (ss) {
         html += '<div class="side-sub" data-cat="' + esc(cs.cat) + '" data-sub="' + esc(ss.sub) + '"><span class="snm">' + esc(ss.sub) + '</span><span class="sn">' + ss.n + '</span></div>';
       });
-      html += '</div></div>';
+      html += '</div></div></div>';
     });
     html += '<div class="side-new" id="sideNew"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新建分类<small>拖到此处</small></div>';
     $('sideList').innerHTML = html;
