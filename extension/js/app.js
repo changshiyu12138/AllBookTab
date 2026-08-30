@@ -468,6 +468,14 @@
     });
     $('ctxSub').querySelectorAll('.ctx-cat').forEach(function (it) {
       it.onclick = function (e) { e.stopPropagation(); }; // 有二级的一级目录本身不直接移动
+      it.addEventListener('mouseenter', function () {
+        var s2 = it.querySelector('.ctx-sub2');
+        if (!s2) return;
+        s2.classList.remove('left');
+        var catRect = it.getBoundingClientRect();
+        // 二级菜单默认向右展开；右侧放不下 → 翻到左侧
+        if (catRect.right + 2 + (s2.offsetWidth || 0) > window.innerWidth - 4) s2.classList.add('left');
+      });
     });
     // 编辑（先保存 id，closeCtxMenu 会清空 CTX_ID）
     $('ctxEdit').onclick = function (e) {
@@ -476,7 +484,7 @@
       closeCtxMenu();
       openEdit(id);
     };
-    // 定位：主菜单贴近鼠标（只防自身溢出）；子菜单若超高则向上展开
+    // 定位：主菜单贴近鼠标（只防自身溢出）
     var m = $('ctxMenu');
     m.classList.add('show');
     var r = m.getBoundingClientRect();
@@ -484,12 +492,35 @@
     var py = Math.min(y, window.innerHeight - r.height - 8);
     m.style.left = Math.max(4, px) + 'px';
     m.style.top = Math.max(4, py) + 'px';
-    // 测量子菜单高度，决定展开方向（向下放不下 → 向上）
+    // 「移动到」一级子菜单：按窗口空间自适应定位
+    //  - 水平：右侧放得下→右侧展开；放不下→翻到左侧（都放不下则贴边夹紧，保证完整显示）
+    //  - 垂直：对齐「移动到」行，但夹紧在视口内（上下都不超界，位置可灵活偏移）
     var subEl = $('ctxSub');
+    var moveRect = $('ctxMove').getBoundingClientRect();
     var oldDisp = subEl.style.display;
     subEl.style.display = 'block'; // 同帧测量（立即恢复，不闪烁）
+    var subW = subEl.offsetWidth || 0;
     var subH = subEl.offsetHeight || 0;
     subEl.style.display = oldDisp;
+    var vw = window.innerWidth, vh = window.innerHeight, GAP = 4;
+    if (r.right + 2 + subW > vw - GAP) {
+      // 右侧放不下 → 左侧展开
+      var leftEdge = r.left - 2 - subW;
+      if (leftEdge < GAP) leftEdge = GAP; // 左侧也放不下 → 贴左边缘夹紧
+      subEl.style.left = 'auto';
+      subEl.style.right = (vw - leftEdge) + 'px';
+    } else {
+      var rEdge = r.right + 2;
+      if (rEdge + subW > vw - GAP) rEdge = Math.max(GAP, vw - subW - GAP);
+      subEl.style.right = 'auto';
+      subEl.style.left = rEdge + 'px';
+    }
+    var vTop = moveRect.top; // 默认与「移动到」行顶部对齐
+    if (vTop + subH > vh - GAP) vTop = vh - GAP - subH; // 底部放不下 → 上移
+    if (vTop < GAP) vTop = GAP; // 顶部放不下 → 下移
+    subEl.style.top = vTop + 'px';
+    subEl.style.bottom = 'auto';
+    // 二级菜单（子分类）超高时向上展开（保留原逻辑）
     m.classList.toggle('sub-up', py + subH > window.innerHeight - 8);
   }
   function closeCtxMenu() {
