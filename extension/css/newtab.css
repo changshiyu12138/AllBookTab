@@ -270,7 +270,7 @@ main{flex:1;min-width:0;padding:0}
 .link:hover{transform:translateY(-2px);box-shadow:0 6px 18px color-mix(in srgb,var(--brand,#0071e3) 22%,transparent);
   border-color:color-mix(in srgb,var(--brand,#0071e3) 55%,transparent)}
 .link .fav{width:32px;height:32px;border-radius:10px;font-size:14px}
-.link .info{min-width:0;flex:1}
+.link .info{min-width:0;flex:1;padding-right:26px} /* 右侧留出收藏/删除按钮的空间，长标题不覆盖按钮 */
 /* 标题区：外层 flex 容器负责等高 + 垂直居中；内层 -webkit-box 负责两行截断。
  * 注意：-webkit-box-pack 与 -webkit-line-clamp 组合时不生效（clamp 强制内容顶对齐），
  * 所以居中必须由外层 flex 完成。 */
