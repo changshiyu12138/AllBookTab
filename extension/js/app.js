@@ -16,7 +16,7 @@
   var DUP_GROUPS = [];   // 重复分组 [{key,kept,dups[]}]，用于「查看」明细
   var quick = [];        // 快捷入口 [{t,u}]
   var selTags = [];      // 已选标签
-  var tagModeAny = true; // true=任一命中 false=全部命中
+  var tagModeAny = false; // 默认「匹配全部」(AND/交集)：多选标签逐层收窄；true=匹配任一(OR/并集)
   var kw = '';           // 搜索词
   var observer = null;
   var OVERRIDES = {};    // 用户拖拽指定的分类 {id: [cat, sub]}
