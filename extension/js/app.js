@@ -15,8 +15,7 @@
   var DUPS = [];         // 重复书签（每组保留首个，其余在此）
   var DUP_GROUPS = [];   // 重复分组 [{key,kept,dups[]}]，用于「查看」明细
   var quick = [];        // 快捷入口 [{t,u}]
-  var selTags = [];      // 已选标签
-  var tagModeAny = false; // 默认「匹配全部」(AND/交集)：多选标签逐层收窄；true=匹配任一(OR/并集)
+  var selTags = [];      // 已选标签（交集/AND：多选逐层收窄，仅此一种模式）
   var kw = '';           // 搜索词
   var observer = null;
   var OVERRIDES = {};    // 用户拖拽指定的分类 {id: [cat, sub]}
@@ -322,13 +321,7 @@
       if (hay.indexOf(kw) === -1) return false;
     }
     if (selTags.length) {
-      if (tagModeAny) {
-        var hit = false;
-        for (var i = 0; i < selTags.length; i++) if (b.tags.indexOf(selTags[i]) !== -1) { hit = true; break; }
-        if (!hit) return false;
-      } else {
-        for (var j = 0; j < selTags.length; j++) if (b.tags.indexOf(selTags[j]) === -1) return false;
-      }
+      for (var j = 0; j < selTags.length; j++) if (b.tags.indexOf(selTags[j]) === -1) return false;
     }
     return true;
   }
@@ -641,8 +634,6 @@
         renderTagbar(); renderMain();
       };
     });
-    $('tagModeBtn').textContent = tagModeAny ? '匹配任一' : '匹配全部';
-    $('tagModeBtn').classList.toggle('on', !tagModeAny);
     $('tagClearBtn').classList.toggle('on', selTags.length > 0);
   }
 
@@ -1312,7 +1303,6 @@
     });
 
     // 标签操作
-    $('tagModeBtn').onclick = function () { tagModeAny = !tagModeAny; renderTagbar(); renderMain(); };
     $('tagClearBtn').onclick = function () { selTags = []; renderTagbar(); renderMain(); };
 
     // 主题
