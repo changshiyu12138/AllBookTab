@@ -624,7 +624,8 @@
       counts = g;
     }
 
-    var names = Object.keys(g).sort(function (a, b) { return (counts[b] || 0) - (counts[a] || 0); });
+    // 排序始终按全局计数（g），保证筛选前后标签位置不变，仅数字与灰化状态更新
+    var names = Object.keys(g).sort(function (a, b) { return g[b] - g[a]; });
     $('tagbar').innerHTML = names.map(function (t) {
       var sel = selTags.indexOf(t) !== -1;
       // 选中态之外的标签：在当前筛选结果里命中数为 0 → 灰色不可选
