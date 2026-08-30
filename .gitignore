@@ -8,6 +8,11 @@ classified_preview.txt
 # 测试文件不入库
 extension/test/
 
+# logo 设计源文件不入库（运行时只用 extension/icons/ 内的多尺寸图标）
+logo.png
+logo-*.png
+logo.svg
+
 # 打包产物不入库
 allbooktab-v*.zip
 allbooktab-v*/

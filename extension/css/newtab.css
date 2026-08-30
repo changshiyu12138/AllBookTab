@@ -23,8 +23,7 @@ a{color:inherit;text-decoration:none}
   backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--border);
 }
 .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.2px;flex-shrink:0}
-.brand .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#2997ff,#0071e3);
-  display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800}
+.brand .logo{width:26px;height:26px;border-radius:8px;object-fit:contain}
 .search{flex:1;max-width:520px;margin:0 auto;position:relative}
 .search input{
   width:100%;padding:9px 40px 9px 38px;border-radius:12px;border:1px solid var(--border);
