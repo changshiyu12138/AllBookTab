@@ -321,6 +321,8 @@ main{flex:1;min-width:0;padding:0}
 .tag-chip .tc{font-size:10.5px;font-weight:700;opacity:.55}
 .tag-chip.sel{background:linear-gradient(135deg,var(--accent),#0071e3);color:#fff;border-color:transparent}
 .tag-chip.sel .tc{opacity:.85}
+.tag-chip.off{opacity:.4;cursor:not-allowed;color:var(--muted);border-color:var(--border);background:var(--bg);filter:grayscale(1)}
+.tag-chip.off:hover{transform:none;color:var(--muted);border-color:var(--border)}
 
 /* ---------- 整理面板（模态） ---------- */
 #modalMask{

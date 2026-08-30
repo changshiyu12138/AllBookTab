@@ -611,15 +611,29 @@
   }
 
   function renderTagbar() {
-    var counts = {};
-    ALL.forEach(function (b) { b.tags.forEach(function (t) { counts[t] = (counts[t] || 0) + 1; }); });
-    var names = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+    // 全局计数（用于未筛选时展示全部标签及总数）
+    var g = {};
+    ALL.forEach(function (b) { b.tags.forEach(function (t) { g[t] = (g[t] || 0) + 1; }); });
+
+    // 已选中标签时，按「当前筛选结果」重算每个标签的命中数
+    var counts;
+    if (selTags.length) {
+      counts = {};
+      ALL.filter(visible).forEach(function (b) { b.tags.forEach(function (t) { counts[t] = (counts[t] || 0) + 1; }); });
+    } else {
+      counts = g;
+    }
+
+    var names = Object.keys(g).sort(function (a, b) { return (counts[b] || 0) - (counts[a] || 0); });
     $('tagbar').innerHTML = names.map(function (t) {
       var sel = selTags.indexOf(t) !== -1;
-      return '<span class="tag-chip' + (sel ? ' sel' : '') + '" data-tag="' + esc(t) + '">' + esc(t) + '<span class="tc">' + counts[t] + '</span></span>';
+      // 选中态之外的标签：在当前筛选结果里命中数为 0 → 灰色不可选
+      var off = !sel && selTags.length > 0 && (counts[t] || 0) === 0;
+      return '<span class="tag-chip' + (sel ? ' sel' : '') + (off ? ' off' : '') + '" data-tag="' + esc(t) + '">' + esc(t) + '<span class="tc">' + (counts[t] || 0) + '</span></span>';
     }).join('');
     $('tagbar').querySelectorAll('.tag-chip').forEach(function (chip) {
       chip.onclick = function () {
+        if (chip.classList.contains('off')) return; // 灰色标签不可选
         var t = chip.dataset.tag;
         var i = selTags.indexOf(t);
         if (i === -1) selTags.push(t); else selTags.splice(i, 1);
