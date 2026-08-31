@@ -492,29 +492,24 @@
     var py = Math.min(y, window.innerHeight - r.height - 8);
     m.style.left = Math.max(4, px) + 'px';
     m.style.top = Math.max(4, py) + 'px';
-    // 「移动到」一级子菜单：按窗口空间自适应定位
-    //  - 水平：右侧放得下→右侧展开；放不下→翻到左侧（都放不下则贴边夹紧，保证完整显示）
-    //  - 垂直：对齐「移动到」行，但夹紧在视口内（上下都不超界，位置可灵活偏移）
+    r = m.getBoundingClientRect(); // 设好位置后重新测量，避免用到上一轮残留的旧坐标（修复菜单位置跳变/远离）
+    // 「移动到」一级子菜单：紧贴主菜单自适应定位
+    //  - 水平：默认主菜单右侧；右侧放不下才翻到左侧（始终贴着主菜单，绝不飞到屏幕另一端）
+    //  - 垂直：对齐「移动到」行，夹紧在视口内（上下都不超界）
     var subEl = $('ctxSub');
     var moveRect = $('ctxMove').getBoundingClientRect();
     var oldDisp = subEl.style.display;
     subEl.style.display = 'block'; // 同帧测量（立即恢复，不闪烁）
-    var subW = subEl.offsetWidth || 0;
+    var subW = subEl.offsetWidth || 170;
     var subH = subEl.offsetHeight || 0;
     subEl.style.display = oldDisp;
     var vw = window.innerWidth, vh = window.innerHeight, GAP = 4;
-    if (r.right + 2 + subW > vw - GAP) {
-      // 右侧放不下 → 左侧展开
-      var leftEdge = r.left - 2 - subW;
-      if (leftEdge < GAP) leftEdge = GAP; // 左侧也放不下 → 贴左边缘夹紧
-      subEl.style.left = 'auto';
-      subEl.style.right = (vw - leftEdge) + 'px';
-    } else {
-      var rEdge = r.right + 2;
-      if (rEdge + subW > vw - GAP) rEdge = Math.max(GAP, vw - subW - GAP);
-      subEl.style.right = 'auto';
-      subEl.style.left = rEdge + 'px';
-    }
+    var left = (r.right + 2 + subW > vw - GAP) ? (r.left - 2 - subW) : (r.right + 2);
+    if (left < GAP) left = GAP;                         // 防止越过左边界
+    if (left + subW > vw - GAP) left = vw - GAP - subW; // 防止越过右边界
+    if (left < GAP) left = GAP;                         // 极窄窗口兜底：贴左边缘
+    subEl.style.right = 'auto';
+    subEl.style.left = left + 'px';
     var vTop = moveRect.top; // 默认与「移动到」行顶部对齐
     if (vTop + subH > vh - GAP) vTop = vh - GAP - subH; // 底部放不下 → 上移
     if (vTop < GAP) vTop = GAP; // 顶部放不下 → 下移
