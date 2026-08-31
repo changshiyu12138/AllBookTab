@@ -423,6 +423,9 @@
   }
 
   // ============ 右键菜单（编辑 / 移动到级联） ============
+  var ctxSubTimer = null;
+  function showCtxSub() { clearTimeout(ctxSubTimer); $('ctxSub').style.display = 'block'; }
+  function hideCtxSub() { ctxSubTimer = setTimeout(function () { $('ctxSub').style.display = 'none'; }, 220); }
   function openCtxMenu(id, x, y) {
     CTX_ID = id;
     var b = null;
@@ -471,10 +474,25 @@
       it.addEventListener('mouseenter', function () {
         var s2 = it.querySelector('.ctx-sub2');
         if (!s2) return;
-        s2.classList.remove('left');
+        // 强制显示以测量真实尺寸（display:none 时 offsetWidth 恒为 0，是之前从不翻左侧的根因）；测完复位，显隐仍交给 :hover
+        s2.style.display = 'block';
+        var w = s2.offsetWidth, h = s2.offsetHeight;
+        s2.style.display = '';
         var catRect = it.getBoundingClientRect();
-        // 二级菜单默认向右展开；右侧放不下 → 翻到左侧
-        if (catRect.right + 2 + (s2.offsetWidth || 0) > window.innerWidth - 4) s2.classList.add('left');
+        var vw = window.innerWidth, vh = window.innerHeight, GAP = 4;
+        // 默认紧贴一级目录右侧（0 间隙，避免移动途中消失）；右侧放不下 → 紧贴其左侧
+        var left = catRect.right;
+        if (left + w > vw - GAP) left = catRect.left - w;
+        if (left < GAP) left = GAP;
+        if (left + w > vw - GAP) left = vw - GAP - w;
+        if (left < GAP) left = GAP;
+        var top = catRect.top; // 默认与该行顶部对齐
+        if (top + h > vh - GAP) top = vh - GAP - h; // 底部放不下 → 上移
+        if (top < GAP) top = GAP;                    // 顶部放不下 → 下移
+        s2.style.left = left + 'px';
+        s2.style.top = top + 'px';
+        s2.style.right = 'auto';
+        s2.style.bottom = 'auto';
       });
     });
     // 编辑（先保存 id，closeCtxMenu 会清空 CTX_ID）
@@ -484,6 +502,12 @@
       closeCtxMenu();
       openEdit(id);
     };
+    // 一级「移动到」菜单：显隐交给 JS 缓冲控制，避免从「移动到」移到子菜单途中消失
+    $('ctxSub').style.display = 'none';
+    $('ctxMove').onmouseenter = showCtxSub;
+    $('ctxMove').onmouseleave = hideCtxSub;
+    $('ctxSub').onmouseenter = showCtxSub;
+    $('ctxSub').onmouseleave = hideCtxSub;
     // 定位：主菜单贴近鼠标（只防自身溢出）
     var m = $('ctxMenu');
     m.classList.add('show');
@@ -494,7 +518,7 @@
     m.style.top = Math.max(4, py) + 'px';
     r = m.getBoundingClientRect(); // 设好位置后重新测量，避免用到上一轮残留的旧坐标（修复菜单位置跳变/远离）
     // 「移动到」一级子菜单：紧贴主菜单自适应定位
-    //  - 水平：默认主菜单右侧；右侧放不下才翻到左侧（始终贴着主菜单，绝不飞到屏幕另一端）
+    //  - 水平：紧贴主菜单右侧（0 间隙）；右侧放不下才紧贴其左侧（始终贴着主菜单，绝不飞到屏幕另一端）
     //  - 垂直：对齐「移动到」行，夹紧在视口内（上下都不超界）
     var subEl = $('ctxSub');
     var moveRect = $('ctxMove').getBoundingClientRect();
@@ -504,7 +528,7 @@
     var subH = subEl.offsetHeight || 0;
     subEl.style.display = oldDisp;
     var vw = window.innerWidth, vh = window.innerHeight, GAP = 4;
-    var left = (r.right + 2 + subW > vw - GAP) ? (r.left - 2 - subW) : (r.right + 2);
+    var left = (r.right + subW > vw - GAP) ? (r.left - subW) : r.right; // 0 间隙紧贴
     if (left < GAP) left = GAP;                         // 防止越过左边界
     if (left + subW > vw - GAP) left = vw - GAP - subW; // 防止越过右边界
     if (left < GAP) left = GAP;                         // 极窄窗口兜底：贴左边缘
@@ -515,8 +539,6 @@
     if (vTop < GAP) vTop = GAP; // 顶部放不下 → 下移
     subEl.style.top = vTop + 'px';
     subEl.style.bottom = 'auto';
-    // 二级菜单（子分类）超高时向上展开（保留原逻辑）
-    m.classList.toggle('sub-up', py + subH > window.innerHeight - 8);
   }
   function closeCtxMenu() {
     CTX_ID = null;
