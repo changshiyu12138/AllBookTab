@@ -13,6 +13,10 @@ index.html
 # 测试文件不入库
 extension/test/
 
+# Python 缓存
+__pycache__/
+*.pyc
+
 # logo 设计源文件不入库（运行时只用 extension/icons/ 内的多尺寸图标）
 logo.png
 logo-*.png
