@@ -5,6 +5,7 @@
   'use strict';
   var C = window.NavClassifier;
   var QUICK_MAX = 12;
+  var RECENT_MAX = 12; // 最近收藏时间线展示条数
   var LS_QUICK = 'myNavQuickV1';
   var LS_THEME = 'myNavThemeV1';
   var LS_OVERRIDE = 'myNavOverrideV1'; // {bookmarkId: [cat, sub]} 拖拽自定义分类
@@ -14,7 +15,7 @@
   var INVALID = [];      // 无效书签（chrome:// 等）
   var DUPS = [];         // 重复书签（每组保留首个，其余在此）
   var DUP_GROUPS = [];   // 重复分组 [{key,kept,dups[]}]，用于「查看」明细
-  var quick = [];        // 快捷入口 [{t,u}]
+  var quick = [];        // 快捷入口/收藏 [{t,u,ts}]；ts=收藏时间戳（用于「最近收藏」时间线），老数据缺省 0
   var selTags = [];      // 已选标签（交集/AND：多选逐层收窄，仅此一种模式）
   var kw = '';           // 搜索词
   var observer = null;
@@ -638,7 +639,7 @@
         e.preventDefault();
         quick.splice(+btn.dataset.qi, 1);
         saveQuick();
-        renderQuick(); renderMain();
+        renderQuick(); renderRecent(); renderMain();
       };
     });
   }
@@ -649,6 +650,45 @@
   function isQuick(url) {
     for (var i = 0; i < quick.length; i++) if (quick[i].u === url) return true;
     return false;
+  }
+
+  // 相对时间（收藏时间线用）
+  function relTime(ts) {
+    if (!ts) return '';
+    var d = Date.now() - ts, s = Math.floor(d / 1000);
+    if (s < 60) return '刚刚';
+    var m = Math.floor(s / 60); if (m < 60) return m + '分钟前';
+    var h = Math.floor(m / 60); if (h < 24) return h + '小时前';
+    var day = Math.floor(h / 24); if (day < 7) return day + '天前';
+    var dt = new Date(ts);
+    return (dt.getMonth() + 1) + '月' + dt.getDate() + '日';
+  }
+
+  // 最近收藏：按收藏时间戳倒序取最近 RECENT_MAX 条，时间线展示
+  function renderRecent() {
+    var el = $('recent');
+    if (!el) return;
+    if (!quick.length) {
+      $('rCount').textContent = '0/' + RECENT_MAX;
+      el.innerHTML = '<div class="recent-empty">还没有收藏 —— 悬停任意书签卡片点 ☆ 即可收藏，这里会按时间线展示最近 ' + RECENT_MAX + ' 条</div>';
+      return;
+    }
+    var list = quick.slice().filter(function (q) { return q.ts; })
+      .sort(function (a, b) { return b.ts - a.ts; }).slice(0, RECENT_MAX);
+    if (!list.length) list = quick.slice(0, RECENT_MAX); // 老数据无时间戳时退化为原顺序
+    $('rCount').textContent = list.length + '/' + RECENT_MAX;
+    el.innerHTML = list.map(function (q) {
+      var host = C.hostOf(q.u);
+      return '<div class="rt-item">' +
+        '<span class="rt-dot"></span>' +
+        '<a class="rt-card" href="' + esc(q.u) + '" target="_blank" rel="noopener" style="--brand:' + C.brandColor(host) + '">' +
+          favHtml(host, q.u, C.brandColor(host)) +
+          '<span class="rt-meta"><span class="rt-title">' + esc(q.t) + '</span><span class="rt-host">' + esc(host) + '</span></span>' +
+        '</a>' +
+        '<span class="rt-time">' + relTime(q.ts) + '</span>' +
+      '</div>';
+    }).join('');
+    attachFavicons(el);
   }
 
   function renderTagbar() {
@@ -907,10 +947,10 @@
           toast('已从快捷入口移除');
         } else {
           if (quick.length >= QUICK_MAX) { toast('快捷入口已满（' + QUICK_MAX + ' 个）'); return; }
-          quick.push({ t: btn.dataset.title, u: url });
+          quick.push({ t: btn.dataset.title, u: url, ts: Date.now() });
           toast('已加入快捷入口 ' + quick.length + '/' + QUICK_MAX);
         }
-        saveQuick(); renderQuick();
+        saveQuick(); renderQuick(); renderRecent();
         btn.textContent = isQuick(url) ? '★' : '☆';
         btn.classList.toggle('on', isQuick(url));
         btn.title = isQuick(url) ? '从快捷入口移除' : '加入快捷入口';
@@ -1243,7 +1283,7 @@
     Object.keys(OVERRIDES).forEach(function (k) { if (!ids[k]) { delete OVERRIDES[k]; dirty = true; } });
     if (dirty) saveOverrides();
     mergeScanIntoInvalid(); // 扫描标记的失效书签在书签刷新后保持
-    renderStats(); renderTagbar(); renderMain(); renderQuick();
+    renderStats(); renderTagbar(); renderMain(); renderQuick(); renderRecent();
   }
 
   function init() {
@@ -1269,9 +1309,15 @@
         FAV_OVERRIDES = cfg.myNavFavOverridesV1;
       }
       if (cfg && Array.isArray(cfg[LS_QUICK])) {
-        quick = cfg[LS_QUICK].slice(0, QUICK_MAX);
+        quick = cfg[LS_QUICK].slice(0, QUICK_MAX).map(function (q) {
+          return { t: q.t, u: q.u, ts: q.ts || 0 }; // 老数据缺省 ts=0（排最旧）
+        });
       } else {
-        try { quick = JSON.parse(localStorage.getItem(LS_QUICK) || '[]') || []; } catch (e) {}
+        try {
+          quick = (JSON.parse(localStorage.getItem(LS_QUICK) || '[]') || []).map(function (q) {
+            return { t: q.t, u: q.u, ts: q.ts || 0 };
+          });
+        } catch (e) {}
       }
       reload();
     });
