@@ -37,7 +37,17 @@
 
   <div class="recent-wrap">
     <div class="recent-label">最近收藏 <span class="rcount" id="rCount"></span><span style="font-size:11px">本地浏览器最近加入的书签</span></div>
-    <div class="recent" id="recent"></div>
+    <div class="recent-body">
+      <div class="recent" id="recent"></div>
+      <div class="recent-nav">
+        <button class="rnav-btn" id="recUp" title="向上滚动 3 条" aria-label="向上滚动">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+        </button>
+        <button class="rnav-btn" id="recDown" title="向下滚动 3 条" aria-label="向下滚动">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -105,14 +115,6 @@
     <div class="mrow">
       <div><div class="mt">导出为 HTML 书签文件</div><div class="ms">导出整理后的分类结构（Netscape 格式），可导入任何浏览器</div></div>
       <button class="mbtn" id="btnExport">导出</button>
-    </div>
-    <div class="mrow" id="rowRecentN">
-      <div><div class="mt">最近收藏展示数量</div><div class="ms">新标签页「最近收藏」按加入时间展示最近几条，默认 3 条，可调 1–20 条</div></div>
-      <div class="stepper">
-        <button class="sbtn" id="recMinus" aria-label="减少">−</button>
-        <span class="sval" id="recVal">3</span>
-        <button class="sbtn" id="recPlus" aria-label="增加">+</button>
-      </div>
     </div>
     <div class="mnote">提示：生成整理文件夹可重复执行，每次都会新建带日期的文件夹，旧的不会覆盖；确认满意后可在书签管理器中手动删除旧版。</div>
   </div>
