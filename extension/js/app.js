@@ -702,8 +702,12 @@
     if (!el) return;
     var items = el.querySelectorAll('.rt-item');
     if (items.length > RECENT_PAGE) {
-      var first = items[0], last = items[RECENT_PAGE - 1];
-      el.style.maxHeight = (last.offsetTop + last.offsetHeight - first.offsetTop) + 'px';
+      // 用 getBoundingClientRect（含小数）而非 offsetTop/offsetHeight（整数取整），
+      // 否则限高会差出零点几像素，滚动时底部露出一条缝
+      var r0 = items[0].getBoundingClientRect();
+      var rN = items[RECENT_PAGE - 1].getBoundingClientRect();
+      // 向上取整：clientHeight 会向下取整，不补的话第 3 条可能被裁掉零点几像素
+      el.style.maxHeight = Math.ceil(rN.bottom - r0.top) + 'px';
     } else {
       el.style.maxHeight = '';
     }
@@ -719,12 +723,37 @@
     dn.disabled = !scrollable || (el.scrollTop + el.clientHeight >= el.scrollHeight - 2);
   }
 
-  // 一次滚动 RECENT_PAGE 条：按首条实际高度推算步长，避免硬编码
-  function recentScrollStep() {
+  /* 一次滚动一页（RECENT_PAGE 条）。
+   * 不用 scrollBy(步长累加)：步长依赖「首条高度 + 硬编码 gap」推算，
+   * 与真实条目间距（含 gap、亚像素高度）有偏差且会逐次累积，导致条目与可视区错位。
+   * 改为用 getBoundingClientRect 实测条目位置（小数精度），绝对定位到
+   * 「上一页/下一页的起始条目」，每次都是绝对坐标、不累积误差；
+   * 末页会滚到底，保证底边与最后一条对齐。 */
+  function scrollRecentPage(dir) {
     var el = $('recent');
-    var it = el && el.querySelector('.rt-item');
-    if (!it) return 0;
-    return RECENT_PAGE * (it.offsetHeight + 8); // 8 = .recent 的 gap
+    if (!el) return;
+    var items = el.querySelectorAll('.rt-item');
+    if (!items.length) return;
+    var st = el.scrollTop;
+    var boxTop = el.getBoundingClientRect().top;
+    // 条目顶部在「未滚动内容坐标系」中的位置（小数精度，不受当前滚动影响）
+    var contentTop = function (it) {
+      return it.getBoundingClientRect().top - boxTop + st;
+    };
+    // 当前位于可视区顶部的条目
+    var topIdx = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (contentTop(items[i]) <= st + 2) topIdx = i; else break;
+    }
+    var page = Math.floor(topIdx / RECENT_PAGE);
+    var targetIdx = (page + dir) * RECENT_PAGE;
+    if (targetIdx < 0) targetIdx = 0;
+    if (targetIdx > items.length - 1) targetIdx = items.length - 1;
+    var maxTop = el.scrollHeight - el.clientHeight;
+    var top = contentTop(items[targetIdx]);
+    if (top < 0) top = 0;
+    if (top > maxTop) top = maxTop;   // 末页：底边对齐，不留半条
+    el.scrollTo({ top: top, behavior: 'smooth' });
   }
 
   function renderTagbar() {
@@ -1447,14 +1476,8 @@
     $('modalMask').onclick = function (e) { if (e.target === $('modalMask')) $('modalMask').classList.remove('show'); };
     // 最近收藏时间线：上下箭头滚动（一次 3 条）
     if ($('recUp')) {
-      $('recUp').onclick = function () {
-        var el = $('recent');
-        el.scrollBy({ top: -recentScrollStep(), behavior: 'smooth' });
-      };
-      $('recDown').onclick = function () {
-        var el = $('recent');
-        el.scrollBy({ top: recentScrollStep(), behavior: 'smooth' });
-      };
+      $('recUp').onclick = function () { scrollRecentPage(-1); };
+      $('recDown').onclick = function () { scrollRecentPage(1); };
       $('recent').addEventListener('scroll', updateRecentNav);
       window.addEventListener('resize', sizeRecentBox);
     }
