@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """书签分类脚本 v2：修复子串匹配bug + 细化分类 + 站点级合并 + 生成HTML"""
-import re, html, json, collections
+import re, html, json, collections, sys, os
 
-SRC = "/Users/yourname/Documents/bookmarks_2026_8_21.html"
-OUT = "/Users/yourname/WorkBuddy/2026-08-21-14-53-08/bookmarks_整理后.html"
+# 输入/输出路径：默认取脚本同目录下的相对文件，也可用命令行参数覆盖
+#   python3 classify_bookmarks.py <输入书签.html> [输出.html]
+SRC = sys.argv[1] if len(sys.argv) > 1 else "bookmarks.html"
+OUT = sys.argv[2] if len(sys.argv) > 2 else "bookmarks_sorted.html"
+PREVIEW = os.path.join(os.path.dirname(os.path.abspath(OUT)), "classified_preview.txt")
 
 # ---------- 解析 ----------
 content = open(SRC, encoding="utf-8").read()
@@ -528,7 +531,7 @@ for top in sorted(result.keys()):
 print(f"\n总数: {total} (原始 797，清理+合并后 {len(bookmarks)})")
 
 # 保存分类结果供检查
-with open("/Users/yourname/WorkBuddy/2026-08-21-14-53-08/classified_preview.txt", "w", encoding="utf-8") as f:
+with open(PREVIEW, "w", encoding="utf-8") as f:
     for top in sorted(result.keys()):
         f.write(f"\n■ {top}\n")
         for sub in sorted(result[top].keys()):
