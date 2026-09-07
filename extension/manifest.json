@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AllBookTab · 书签整理与新标签页导航",
-  "version": "0.6.0.16",
+  "version": "0.6.0.17",
   "description": "自动读取浏览器书签并智能整理：分类导航、多标签筛选、快速搜索、重复清理、一键生成整理后的书签文件夹，打造你的专属新标签页。",
   "permissions": ["bookmarks", "storage", "favicon"],
   "host_permissions": ["https://favicon.im/*", "https://*.favicon.im/*", "https://icons.duckduckgo.com/*"],
