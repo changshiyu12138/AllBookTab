@@ -639,7 +639,7 @@
         e.preventDefault();
         quick.splice(+btn.dataset.qi, 1);
         saveQuick();
-        renderQuick(); renderRecent(); renderMain();
+        renderQuick(); renderMain();
       };
     });
   }
@@ -652,7 +652,7 @@
     return false;
   }
 
-  // 相对时间（收藏时间线用）
+  // 相对时间（最近收藏时间线用）
   function relTime(ts) {
     if (!ts) return '';
     var d = Date.now() - ts, s = Math.floor(d / 1000);
@@ -664,28 +664,27 @@
     return (dt.getMonth() + 1) + '月' + dt.getDate() + '日';
   }
 
-  // 最近收藏：按收藏时间戳倒序取最近 RECENT_MAX 条，时间线展示
+  // 最近收藏：直接读本机浏览器书签的 dateAdded，按「加入时间」倒序取最近 RECENT_MAX 条，与 ☆ 星标无关
   function renderRecent() {
     var el = $('recent');
     if (!el) return;
-    if (!quick.length) {
-      $('rCount').textContent = '0/' + RECENT_MAX;
-      el.innerHTML = '<div class="recent-empty">还没有收藏 —— 悬停任意书签卡片点 ☆ 即可收藏，这里会按时间线展示最近 ' + RECENT_MAX + ' 条</div>';
+    var list = ALL.filter(function (b) { return b.dateAdded; })
+      .sort(function (a, b) { return b.dateAdded - a.dateAdded; })
+      .slice(0, RECENT_MAX);
+    $('rCount').textContent = list.length ? (list.length + ' 条') : '';
+    if (!list.length) {
+      el.innerHTML = '<div class="recent-empty">还没有检测到带加入时间的书签 —— 当你在浏览器里新增书签，这里会按加入时间展示最近 ' + RECENT_MAX + ' 条</div>';
       return;
     }
-    var list = quick.slice().filter(function (q) { return q.ts; })
-      .sort(function (a, b) { return b.ts - a.ts; }).slice(0, RECENT_MAX);
-    if (!list.length) list = quick.slice(0, RECENT_MAX); // 老数据无时间戳时退化为原顺序
-    $('rCount').textContent = list.length + '/' + RECENT_MAX;
-    el.innerHTML = list.map(function (q) {
-      var host = C.hostOf(q.u);
+    el.innerHTML = list.map(function (b) {
+      var host = C.hostOf(b.url);
       return '<div class="rt-item">' +
         '<span class="rt-dot"></span>' +
-        '<a class="rt-card" href="' + esc(q.u) + '" target="_blank" rel="noopener" style="--brand:' + C.brandColor(host) + '">' +
-          favHtml(host, q.u, C.brandColor(host)) +
-          '<span class="rt-meta"><span class="rt-title">' + esc(q.t) + '</span><span class="rt-host">' + esc(host) + '</span></span>' +
+        '<a class="rt-card" href="' + esc(b.url) + '" target="_blank" rel="noopener" style="--brand:' + C.brandColor(host) + '">' +
+          favHtml(host, b.url, C.brandColor(host)) +
+          '<span class="rt-meta"><span class="rt-title">' + esc(b.title) + '</span><span class="rt-host">' + esc(host) + '</span></span>' +
         '</a>' +
-        '<span class="rt-time">' + relTime(q.ts) + '</span>' +
+        '<span class="rt-time">' + relTime(b.dateAdded) + '</span>' +
       '</div>';
     }).join('');
     attachFavicons(el);
@@ -947,10 +946,10 @@
           toast('已从快捷入口移除');
         } else {
           if (quick.length >= QUICK_MAX) { toast('快捷入口已满（' + QUICK_MAX + ' 个）'); return; }
-          quick.push({ t: btn.dataset.title, u: url, ts: Date.now() });
+          quick.push({ t: btn.dataset.title, u: url });
           toast('已加入快捷入口 ' + quick.length + '/' + QUICK_MAX);
         }
-        saveQuick(); renderQuick(); renderRecent();
+        saveQuick(); renderQuick();
         btn.textContent = isQuick(url) ? '★' : '☆';
         btn.classList.toggle('on', isQuick(url));
         btn.title = isQuick(url) ? '从快捷入口移除' : '加入快捷入口';
@@ -1315,7 +1314,7 @@
       } else {
         try {
           quick = (JSON.parse(localStorage.getItem(LS_QUICK) || '[]') || []).map(function (q) {
-            return { t: q.t, u: q.u, ts: q.ts || 0 };
+            return { t: q.t, u: q.u };
           });
         } catch (e) {}
       }
