@@ -625,7 +625,7 @@
     $('qCount').textContent = quick.length + '/' + QUICK_MAX;
     var el = $('quick');
     if (!quick.length) {
-      el.innerHTML = '<div class="quick-empty">' + (IS_TOUCH ? '还没有快捷入口 —— 点书签卡片右上角 ☆ 即可添加（最多 ' : '还没有快捷入口 —— 悬停任意书签卡片点 ☆ 即可添加（最多 ') + QUICK_MAX + ' 个）</div>';
+      el.innerHTML = '<div class="quick-empty">' + (IS_TOUCH ? '还没有快捷入口 —— 点书签卡片右上角 + 即可添加（最多 ' : '还没有快捷入口 —— 悬停任意书签卡片点 + 即可添加（最多 ') + QUICK_MAX + ' 个）</div>';
       return;
     }
     el.innerHTML = quick.map(function (q, i) {
@@ -665,7 +665,7 @@
     return (dt.getMonth() + 1) + '月' + dt.getDate() + '日';
   }
 
-  // 最近收藏：直接读本机浏览器书签的 dateAdded，按「加入时间」倒序取最近 RECENT_MAX 条，与 ☆ 星标无关
+  // 最近收藏：直接读本机浏览器书签的 dateAdded，按「加入时间」倒序取最近 RECENT_MAX 条，与快捷入口的加号状态无关
   function renderRecent() {
     var el = $('recent');
     if (!el) return;
@@ -873,11 +873,18 @@
     });
   }
 
+  // 快捷入口按钮图标：未加入=加号，已加入=对勾（对应原 ☆ / ★ 两种状态）
+  function qaddIcon(on) {
+    return on
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  }
+
   function cardHtml(b) {
     var brand = C.brandColor(b.host);
     var on = isQuick(b.url);
     return '<a class="link" draggable="true" data-bid="' + esc(b.id) + '" href="' + esc(b.url) + '" target="_blank" rel="noopener" style="--brand:' + brand + '" data-tags="' + esc(b.tags.join(',')) + '" title="' + (IS_TOUCH ? '点击 ⋯ 可调整分类' : '按住可拖拽到左侧侧边栏调整分类') + '">' +
-      '<button class="qadd' + (on ? ' on' : '') + '" data-url="' + esc(b.url) + '" data-title="' + esc(b.title) + '" title="' + (on ? '从快捷入口移除' : '加入快捷入口') + '">' + (on ? '★' : '☆') + '</button>' +
+      '<button class="qadd' + (on ? ' on' : '') + '" data-url="' + esc(b.url) + '" data-title="' + esc(b.title) + '" title="' + (on ? '从快捷入口移除' : '加入快捷入口') + '">' + qaddIcon(on) + '</button>' +
       (IS_TOUCH ? '<button class="mvbtn" data-bid="' + esc(b.id) + '" data-title="' + esc(b.title) + '" title="移动到分类">⋯</button>' : '') +
       '<button class="delbtn" data-bid="' + esc(b.id) + '" title="删除书签"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6"/></svg></button>' +
       favHtml(b.host, b.url, brand, b.id) +
@@ -1016,7 +1023,7 @@
           toast('已加入快捷入口 ' + quick.length + '/' + QUICK_MAX);
         }
         saveQuick(); renderQuick();
-        btn.textContent = isQuick(url) ? '★' : '☆';
+        btn.innerHTML = qaddIcon(isQuick(url));
         btn.classList.toggle('on', isQuick(url));
         btn.title = isQuick(url) ? '从快捷入口移除' : '加入快捷入口';
       };
