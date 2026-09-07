@@ -5,9 +5,11 @@
   'use strict';
   var C = window.NavClassifier;
   var QUICK_MAX = 12;
-  var RECENT_MAX = 12; // 最近收藏时间线展示条数
+  var RECENT_N = 3; // 最近收藏时间线展示条数（用户可在整理面板调整，默认 3）
+  var RECENT_MIN = 1, RECENT_MAXN = 20;
   var LS_QUICK = 'myNavQuickV1';
   var LS_THEME = 'myNavThemeV1';
+  var LS_RECENT_N = 'myNavRecentNV1';
   var LS_OVERRIDE = 'myNavOverrideV1'; // {bookmarkId: [cat, sub]} 拖拽自定义分类
 
   // ============ 全局状态 ============
@@ -664,16 +666,16 @@
     return (dt.getMonth() + 1) + '月' + dt.getDate() + '日';
   }
 
-  // 最近收藏：直接读本机浏览器书签的 dateAdded，按「加入时间」倒序取最近 RECENT_MAX 条，与 ☆ 星标无关
+  // 最近收藏：直接读本机浏览器书签的 dateAdded，按「加入时间」倒序取最近 RECENT_N 条，与 ☆ 星标无关
   function renderRecent() {
     var el = $('recent');
     if (!el) return;
     var list = ALL.filter(function (b) { return b.dateAdded; })
       .sort(function (a, b) { return b.dateAdded - a.dateAdded; })
-      .slice(0, RECENT_MAX);
+      .slice(0, RECENT_N);
     $('rCount').textContent = list.length ? (list.length + ' 条') : '';
     if (!list.length) {
-      el.innerHTML = '<div class="recent-empty">还没有检测到带加入时间的书签 —— 当你在浏览器里新增书签，这里会按加入时间展示最近 ' + RECENT_MAX + ' 条</div>';
+      el.innerHTML = '<div class="recent-empty">还没有检测到带加入时间的书签 —— 当你在浏览器里新增书签，这里会按加入时间展示最近 ' + RECENT_N + ' 条</div>';
       return;
     }
     el.innerHTML = list.map(function (b) {
@@ -688,6 +690,10 @@
       '</div>';
     }).join('');
     attachFavicons(el);
+  }
+
+  function saveRecentN() {
+    try { chrome.storage.local.set({ myNavRecentNV1: RECENT_N }); } catch (e) {}
   }
 
   function renderTagbar() {
@@ -1114,6 +1120,12 @@
       $(p[0]).classList.remove('show'); $(p[0]).innerHTML = '';
       $(p[1]).textContent = '查看';
     });
+    // 同步「最近收藏」展示数量
+    if ($('recVal')) {
+      $('recVal').textContent = RECENT_N;
+      $('recMinus').disabled = RECENT_N <= RECENT_MIN;
+      $('recPlus').disabled = RECENT_N >= RECENT_MAXN;
+    }
     $('modalMask').classList.add('show');
   }
 
@@ -1298,8 +1310,11 @@
     } catch (e) {}
     // 清理 v0.5.2.9 及以前误存的垃圾键（当时用 {n, v} 而非真实 key 写入）
     try { chrome.storage.local.remove(['n', 'v']); } catch (e) {}
-    chrome.storage.local.get([LS_THEME, LS_QUICK, 'myNavOverrideV1', 'myNavFavOverridesV1'], function (cfg) {
+    chrome.storage.local.get([LS_THEME, LS_QUICK, 'myNavOverrideV1', 'myNavFavOverridesV1', LS_RECENT_N], function (cfg) {
       if (cfg && cfg[LS_THEME]) dark = true;
+      if (cfg && typeof cfg[LS_RECENT_N] === 'number' && cfg[LS_RECENT_N] >= RECENT_MIN && cfg[LS_RECENT_N] <= RECENT_MAXN) {
+        RECENT_N = cfg[LS_RECENT_N];
+      }
       applyTheme(dark);
       if (cfg && cfg.myNavOverrideV1 && typeof cfg.myNavOverrideV1 === 'object') {
         OVERRIDES = cfg.myNavOverrideV1;
@@ -1407,6 +1422,23 @@
     $('organizeBtn').onclick = openOrganize;
     $('mClose').onclick = function () { $('modalMask').classList.remove('show'); };
     $('modalMask').onclick = function (e) { if (e.target === $('modalMask')) $('modalMask').classList.remove('show'); };
+    // 最近收藏展示数量调节
+    if ($('recMinus')) {
+      $('recMinus').onclick = function () {
+        if (RECENT_N <= RECENT_MIN) return;
+        RECENT_N--; $('recVal').textContent = RECENT_N;
+        $('recMinus').disabled = RECENT_N <= RECENT_MIN;
+        $('recPlus').disabled = RECENT_N >= RECENT_MAXN;
+        saveRecentN(); renderRecent();
+      };
+      $('recPlus').onclick = function () {
+        if (RECENT_N >= RECENT_MAXN) return;
+        RECENT_N++; $('recVal').textContent = RECENT_N;
+        $('recMinus').disabled = RECENT_N <= RECENT_MIN;
+        $('recPlus').disabled = RECENT_N >= RECENT_MAXN;
+        saveRecentN(); renderRecent();
+      };
+    }
     // 移动到分类面板
     $('mMoveClose').onclick = closeMovePanel;
     $('moveMask').onclick = function (e) { if (e.target === $('moveMask')) closeMovePanel(); };
