@@ -5,6 +5,11 @@
 bookmarks_raw.txt
 classified_preview.txt
 
+# 忽略含全部个人书签的生成产物（含隐私，绝不入库）
+bookmarks_整理后.html
+bookmarks_*.html
+index.html
+
 # 测试文件不入库
 extension/test/
 
